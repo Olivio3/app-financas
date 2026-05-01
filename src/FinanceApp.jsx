@@ -37,6 +37,14 @@ const formatCurrency = (value) => {
   }).format(value);
 };
 
+const formatCompactCurrency = (value) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact'
+  }).format(value);
+};
+
 const CATEGORIAS = ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Salário', 'Freelance', 'Outros'];
 const TIPOS_INVESTIMENTO = ['Renda Fixa', 'Ações', 'FII', 'Cripto', 'Internacional'];
 
@@ -275,7 +283,7 @@ export default function FinanceApp({ session }) {
                 <BarChart data={barData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                  <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `R$ ${val/1000}k`} />
+                  <YAxis axisLine={false} tickLine={false} width={80} tickFormatter={(val) => formatCompactCurrency(val)} />
                   <Tooltip formatter={(value) => formatCurrency(value)} />
                   <Bar dataKey="Entradas" fill="#2C6E7F" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="Saídas" fill="#E08E79" radius={[4, 4, 0, 0]} />
@@ -358,9 +366,17 @@ export default function FinanceApp({ session }) {
       e.preventDefault();
       if (!novaTransacao.descricao || !novaTransacao.valor) return;
 
-      const numParcelas = novaTransacao.pagamento === 'parcelado' ? parseInt(novaTransacao.parcelas, 10) : 1;
+      let numParcelas = 1;
       const valorTotal = parseFloat(novaTransacao.valor);
-      const valorParcela = parseFloat((valorTotal / numParcelas).toFixed(2));
+      let valorParcela = valorTotal;
+      const isParcelado = novaTransacao.pagamento === 'parcelado';
+
+      if (isParcelado) {
+        numParcelas = parseInt(novaTransacao.parcelas, 10);
+        valorParcela = parseFloat((valorTotal / numParcelas).toFixed(2));
+      } else if (novaTransacao.frequencia === 'recorrente') {
+        numParcelas = 12; // Replicar por 12 meses para garantir um ano de contas
+      }
       
       const transactionsToInsert = [];
       const [anoStr, mesStr, diaStr] = novaTransacao.data.split('-');
@@ -378,20 +394,20 @@ export default function FinanceApp({ session }) {
         const dataStr = `${y}-${m.toString().padStart(2, '0')}-${dia.toString().padStart(2, '0')}`;
         
         let valorFinal = valorParcela;
-        if (i === numParcelas - 1 && numParcelas > 1) {
+        if (isParcelado && i === numParcelas - 1 && numParcelas > 1) {
             valorFinal = parseFloat((valorTotal - (valorParcela * (numParcelas - 1))).toFixed(2));
         }
 
         transactionsToInsert.push({
-          descricao: numParcelas > 1 ? `${novaTransacao.descricao} (${i+1}/${numParcelas})` : novaTransacao.descricao,
+          descricao: isParcelado ? `${novaTransacao.descricao} (${i+1}/${numParcelas})` : novaTransacao.descricao,
           valor: valorFinal,
           tipo: novaTransacao.tipo,
           categoria: novaTransacao.categoria,
           data: dataStr,
           frequencia: novaTransacao.frequencia,
           forma_pagamento: novaTransacao.pagamento,
-          total_parcelas: numParcelas,
-          parcela_atual: i + 1,
+          total_parcelas: isParcelado ? numParcelas : 1,
+          parcela_atual: isParcelado ? i + 1 : 1,
           user_id: session.user.id
         });
       }
@@ -524,16 +540,29 @@ export default function FinanceApp({ session }) {
     
     // Calcula saldo anterior ao mês selecionado para o acumulado
     saldoAcumulado = state.transactions.filter(t => {
-      const d = new Date(t.data);
+      if (!t.data) return false;
+      const [ano, mes] = t.data.split('-');
+      const d = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, 1);
       return d < new Date(selectedYear, selectedMonth - 1, 1);
     }).reduce((acc, t) => t.tipo === 'Entrada' ? acc + t.valor : acc - t.valor, 0);
+
+    const hoje = new Date();
+    const isMesAtual = selectedYear === hoje.getFullYear() && selectedMonth === hoje.getMonth() + 1;
+    const isMesFuturo = new Date(selectedYear, selectedMonth - 1, 1) > hoje;
 
     const lineData = [];
     for (let i = 1; i <= diasNoMes; i++) {
       const transDia = filteredTransactions.filter(t => t.data && parseInt(t.data.split('-')[2], 10) === i);
       const valDia = transDia.reduce((acc, t) => t.tipo === 'Entrada' ? acc + t.valor : acc - t.valor, 0);
-      saldoAcumulado += valDia;
-      lineData.push({ dia: i, saldo: saldoAcumulado });
+      
+      const isFutureDay = isMesFuturo || (isMesAtual && i > hoje.getDate());
+
+      if (!isFutureDay) {
+        saldoAcumulado += valDia;
+        lineData.push({ dia: i, saldo: saldoAcumulado });
+      } else {
+        lineData.push({ dia: i, saldo: null });
+      }
     }
 
     // Resumo por categoria
@@ -573,14 +602,26 @@ export default function FinanceApp({ session }) {
 
         <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
           <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Evolução do Saldo</h3>
-          <div className="h-64">
+          <div className="h-[500px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineData}>
+              <LineChart data={lineData} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                 <XAxis dataKey="dia" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={(val) => `R$ ${val/1000}k`} />
+                <YAxis axisLine={false} tickLine={false} width={80} interval={0} domain={[0, 6000]} ticks={[100, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]} tickFormatter={(val) => formatCompactCurrency(val)} />
                 <Tooltip formatter={(value) => formatCurrency(value)} labelFormatter={(label) => `Dia ${label}`} />
-                <Line type="monotone" dataKey="saldo" stroke="#2C6E7F" strokeWidth={3} dot={false} activeDot={{ r: 8 }} />
+                <Line 
+                  type="monotone" 
+                  dataKey="saldo" 
+                  stroke="#2C6E7F" 
+                  strokeWidth={3} 
+                  dot={(props) => {
+                    if (isMesAtual && props.payload.dia === hoje.getDate()) {
+                      return <circle key={props.key} cx={props.cx} cy={props.cy} r={5} fill="#2C6E7F" stroke="white" strokeWidth={2} />;
+                    }
+                    return null;
+                  }}
+                  activeDot={{ r: 8 }} 
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
