@@ -416,7 +416,7 @@ export default function FinanceApp({ session }) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
             <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Fluxo de Caixa (6 meses)</h3>
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
@@ -431,18 +431,17 @@ export default function FinanceApp({ session }) {
           </div>
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
             <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Despesas por Categoria</h3>
-            <div className="h-64">
+            <div className="h-80">
               {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 30, left: 30, bottom: 0 }}>
+                  <PieChart margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
                     <Pie
                       data={pieData}
                       innerRadius={60}
-                      outerRadius={75}
+                      outerRadius={80}
                       paddingAngle={5}
                       dataKey="value"
-                      labelLine={false}
-                      label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                      label={false}
                     >
                       {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={getCategoryColor(entry.name)} />)}
                     </Pie>
@@ -453,7 +452,13 @@ export default function FinanceApp({ session }) {
                         return [`${formatCurrency(value)} (${percent}%)`, name];
                       }}
                     />
-                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                    <Legend 
+                      iconType="circle" 
+                      formatter={(value, entry) => {
+                        const { percent } = entry.payload;
+                        return <span className="text-xs font-medium text-gray-700">{value} ({(percent * 100).toFixed(0)}%)</span>;
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
