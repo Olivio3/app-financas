@@ -153,6 +153,20 @@ export default function FinanceApp({ session }) {
   const [novoInvest, setNovoInvest] = useState({ nome: '', tipo: TIPOS_INVESTIMENTO[0], valorInvestido: '', rentabilidade: '', dataInicio: new Date().toISOString().split('T')[0] });
   const [selectedDay, setSelectedDay] = useState(null);
   
+  const [transactionToDelete, setTransactionToDelete] = useState(null);
+
+  const confirmDelete = async () => {
+    if (!transactionToDelete) return;
+    const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete);
+    if (error) {
+      console.error("Erro ao deletar:", error);
+      alert("Erro ao apagar: " + error.message);
+    } else {
+      dispatch({ type: 'DELETE_TRANSACTION', payload: transactionToDelete });
+    }
+    setTransactionToDelete(null);
+  };
+  
   // Cálculos Globais Filtrados
   const filteredTransactions = useMemo(() => {
     return state.transactions.filter(t => {
@@ -323,8 +337,13 @@ export default function FinanceApp({ session }) {
                     <p className="text-xs text-gray-500">{t.data ? t.data.split('-').reverse().join('/') : ''} • {t.categoria}</p>
                   </div>
                 </div>
-                <div className={`font-medium ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-600'}`}>
-                  {t.tipo === 'Entrada' ? '+' : '-'}{formatCurrency(t.valor)}
+                <div className="flex items-center space-x-4">
+                  <div className={`font-medium ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-600'}`}>
+                    {t.tipo === 'Entrada' ? '+' : '-'}{formatCurrency(t.valor)}
+                  </div>
+                  <button onClick={() => setTransactionToDelete(t.id)} className="text-gray-400 hover:text-red-500 transition-colors">
+                    <Trash2 className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -481,10 +500,7 @@ export default function FinanceApp({ session }) {
                       {formatCurrency(t.valor)}
                     </td>
                     <td className="p-4">
-                      <button onClick={async () => {
-                        const { error } = await supabase.from('transactions').delete().eq('id', t.id);
-                        if (!error) dispatch({ type: 'DELETE_TRANSACTION', payload: t.id });
-                      }} className="text-gray-400 hover:text-red-500 transition-colors">
+                      <button onClick={() => setTransactionToDelete(t.id)} className="text-gray-400 hover:text-red-500 transition-colors">
                         <Trash2 className="w-5 h-5" />
                       </button>
                     </td>
@@ -920,7 +936,7 @@ export default function FinanceApp({ session }) {
       <aside className="w-64 bg-[#1C2B2D] text-white flex flex-col">
         <div className="p-6">
           <h1 className="font-playfair text-2xl font-bold flex items-center text-[#FDFAF4]">
-            <Wallet className="mr-2 text-[#7FB5C2]" /> Finanças
+            <Wallet className="mr-2 text-[#7FB5C2]" /> No Azul
           </h1>
         </div>
         <nav className="flex-1 px-4 space-y-2 mt-4">
@@ -985,6 +1001,27 @@ export default function FinanceApp({ session }) {
             {activeTab === 'calendario' && renderCalendario()}
           </div>
         </div>
+
+        {transactionToDelete && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-2xl shadow-xl w-96 border border-gray-100 animate-in fade-in zoom-in duration-200">
+              <div className="flex justify-center mb-4 text-red-500">
+                <AlertCircle className="w-12 h-12" />
+              </div>
+              <h3 className="text-xl font-playfair font-bold text-center text-[#1C2B2D] mb-2">Excluir Transação</h3>
+              <p className="text-center text-gray-500 mb-6">Tem certeza que deseja apagar? Esta ação não pode ser desfeita.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setTransactionToDelete(null)} className="flex-1 py-2 rounded-xl text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={confirmDelete} className="flex-1 py-2 rounded-xl text-white bg-red-500 hover:bg-red-600 font-medium transition-colors">
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );

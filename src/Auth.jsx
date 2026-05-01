@@ -44,7 +44,7 @@ export default function Auth() {
             <Wallet className="text-white w-8 h-8" />
           </div>
           <h1 className="font-playfair text-3xl font-bold text-[#1C2B2D]">
-            Finanças
+            No Azul
           </h1>
           <p className="text-gray-500 mt-2 text-center">
             {isLogin ? 'Faça login para acessar seu painel' : 'Crie sua conta para começar a gerenciar seu dinheiro'}
