@@ -144,7 +144,11 @@ export default function FinanceApp({ session }) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   
   // State dos formulários das abas
-  const [novaTransacao, setNovaTransacao] = useState({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: new Date().toISOString().split('T')[0] });
+  const [novaTransacao, setNovaTransacao] = useState({ 
+    descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', 
+    data: new Date().toISOString().split('T')[0],
+    frequencia: 'pontual', pagamento: 'a vista', parcelas: 1
+  });
   const [novoOrcamento, setNovoOrcamento] = useState({ categoria: CATEGORIAS[0], valor: '' });
   const [novoInvest, setNovoInvest] = useState({ nome: '', tipo: TIPOS_INVESTIMENTO[0], valorInvestido: '', rentabilidade: '', dataInicio: new Date().toISOString().split('T')[0] });
   const [selectedDay, setSelectedDay] = useState(null);
@@ -180,6 +184,22 @@ export default function FinanceApp({ session }) {
       }, {});
     
     const pieData = Object.keys(gastosPorCategoria).map(key => ({ name: key, value: gastosPorCategoria[key] }));
+
+    // Previsões e Faturas
+    const previsaoAnualRecorrente = filteredTransactions
+      .filter(t => t.tipo === 'Saída' && t.frequencia === 'recorrente')
+      .reduce((acc, curr) => acc + curr.valor, 0) * 12;
+
+    const dataAtual = new Date(selectedYear, selectedMonth, 1);
+    const faturasFuturas = state.transactions
+      .filter(t => t.tipo === 'Saída' && t.forma_pagamento === 'parcelado')
+      .filter(t => {
+         if (!t.data) return false;
+         const [ano, mes] = t.data.split('-');
+         const tDate = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, 1);
+         return tDate > dataAtual;
+      })
+      .reduce((acc, curr) => acc + curr.valor, 0);
 
     // Gráfico de Barras - Últimos 6 meses
     const last6Months = [];
@@ -268,6 +288,24 @@ export default function FinanceApp({ session }) {
           </div>
         </div>
 
+        {/* Previsões Futuras */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-playfair font-bold text-lg text-[#1C2B2D] mb-1">Custo Fixo Anual (Previsão)</h3>
+              <p className="text-sm text-gray-500">Baseado nas despesas recorrentes atuais (x12)</p>
+            </div>
+            <div className="text-2xl font-playfair font-bold text-[#E08E79]">{formatCurrency(previsaoAnualRecorrente)}</div>
+          </div>
+          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-playfair font-bold text-lg text-[#1C2B2D] mb-1">Dívida Futura (Parcelamentos)</h3>
+              <p className="text-sm text-gray-500">Soma de todas as parcelas dos próximos meses</p>
+            </div>
+            <div className="text-2xl font-playfair font-bold text-red-700">{formatCurrency(faturasFuturas)}</div>
+          </div>
+        </div>
+
         {/* Últimas Transações */}
         <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100">
@@ -300,24 +338,55 @@ export default function FinanceApp({ session }) {
     const handleAdd = async (e) => {
       e.preventDefault();
       if (!novaTransacao.descricao || !novaTransacao.valor) return;
-      
-      const newTransaction = {
-        ...novaTransacao,
-        valor: parseFloat(novaTransacao.valor),
-        user_id: session.user.id
-      };
 
-      const { data, error } = await supabase.from('transactions').insert([newTransaction]).select();
+      const numParcelas = novaTransacao.pagamento === 'parcelado' ? parseInt(novaTransacao.parcelas, 10) : 1;
+      const valorTotal = parseFloat(novaTransacao.valor);
+      const valorParcela = parseFloat((valorTotal / numParcelas).toFixed(2));
+      
+      const transactionsToInsert = [];
+      const [anoStr, mesStr, diaStr] = novaTransacao.data.split('-');
+      const ano = parseInt(anoStr, 10);
+      const mes = parseInt(mesStr, 10);
+      const dia = parseInt(diaStr, 10);
+
+      for (let i = 0; i < numParcelas; i++) {
+        let m = mes + i;
+        let y = ano;
+        if (m > 12) {
+          y += Math.floor((m - 1) / 12);
+          m = ((m - 1) % 12) + 1;
+        }
+        const dataStr = `${y}-${m.toString().padStart(2, '0')}-${dia.toString().padStart(2, '0')}`;
+        
+        let valorFinal = valorParcela;
+        if (i === numParcelas - 1 && numParcelas > 1) {
+            valorFinal = parseFloat((valorTotal - (valorParcela * (numParcelas - 1))).toFixed(2));
+        }
+
+        transactionsToInsert.push({
+          descricao: numParcelas > 1 ? `${novaTransacao.descricao} (${i+1}/${numParcelas})` : novaTransacao.descricao,
+          valor: valorFinal,
+          tipo: novaTransacao.tipo,
+          categoria: novaTransacao.categoria,
+          data: dataStr,
+          frequencia: novaTransacao.frequencia,
+          forma_pagamento: novaTransacao.pagamento,
+          total_parcelas: numParcelas,
+          parcela_atual: i + 1,
+          user_id: session.user.id
+        });
+      }
+
+      const { data, error } = await supabase.from('transactions').insert(transactionsToInsert).select();
       
       if (error) {
         console.error("Erro do Supabase:", error);
-        alert("Erro ao salvar transação: " + error.message + " (Você já rodou o script SQL?)");
+        alert("Erro ao salvar transação: " + error.message + " (Você já rodou o script SQL das novas colunas?)");
       } else if (data) {
-        dispatch({
-          type: 'ADD_TRANSACTION',
-          payload: data[0]
+        data.forEach(t => {
+            dispatch({ type: 'ADD_TRANSACTION', payload: t });
         });
-        setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: new Date().toISOString().split('T')[0] });
+        setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: new Date().toISOString().split('T')[0], frequencia: 'pontual', pagamento: 'a vista', parcelas: 1 });
       }
     };
 
@@ -325,36 +394,61 @@ export default function FinanceApp({ session }) {
       <div className="space-y-6">
         <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
           <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Nova Transação</h3>
-          <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-7 gap-4 items-end">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-              <input type="text" required value={novaTransacao.descricao} onChange={e => setNovaTransacao({...novaTransacao, descricao: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] focus:border-[#2C6E7F]" placeholder="Ex: Supermercado" />
+          <form onSubmit={handleAdd} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                <input type="text" required value={novaTransacao.descricao} onChange={e => setNovaTransacao({...novaTransacao, descricao: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="Ex: Supermercado" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data da 1ª Parcela</label>
+                <input type="date" required value={novaTransacao.data} onChange={e => setNovaTransacao({...novaTransacao, data: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total (R$)</label>
+                <input type="number" step="0.01" required value={novaTransacao.valor} onChange={e => setNovaTransacao({...novaTransacao, valor: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-              <input type="date" required value={novaTransacao.data} onChange={e => setNovaTransacao({...novaTransacao, data: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] focus:border-[#2C6E7F]" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
-              <input type="number" step="0.01" required value={novaTransacao.valor} onChange={e => setNovaTransacao({...novaTransacao, valor: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] focus:border-[#2C6E7F]" placeholder="0.00" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-              <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({...novaTransacao, tipo: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] focus:border-[#2C6E7F]">
-                <option value="Saída">Saída</option>
-                <option value="Entrada">Entrada</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-              <select value={novaTransacao.categoria} onChange={e => setNovaTransacao({...novaTransacao, categoria: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] focus:border-[#2C6E7F]">
-                {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <button type="submit" className="w-full bg-[#2C6E7F] text-white p-2 rounded-lg hover:bg-[#1A4A57] transition-colors flex items-center justify-center">
-                <Plus className="w-5 h-5 mr-1" /> Adicionar
-              </button>
+            
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({...novaTransacao, tipo: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                  <option value="Saída">Saída</option>
+                  <option value="Entrada">Entrada</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                <select value={novaTransacao.categoria} onChange={e => setNovaTransacao({...novaTransacao, categoria: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                  {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
+                <select disabled={novaTransacao.pagamento === 'parcelado'} value={novaTransacao.frequencia} onChange={e => setNovaTransacao({...novaTransacao, frequencia: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] disabled:bg-gray-100">
+                  <option value="pontual">Pontual</option>
+                  <option value="recorrente">Mensal Fixa</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>
+                <select value={novaTransacao.pagamento} onChange={e => setNovaTransacao({...novaTransacao, pagamento: e.target.value, frequencia: e.target.value === 'parcelado' ? 'pontual' : novaTransacao.frequencia})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                  <option value="a vista">À vista</option>
+                  <option value="parcelado">Parcelado</option>
+                </select>
+              </div>
+              {novaTransacao.pagamento === 'parcelado' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Qtd Parcelas</label>
+                  <input type="number" min="2" max="120" required value={novaTransacao.parcelas} onChange={e => setNovaTransacao({...novaTransacao, parcelas: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="10" />
+                </div>
+              ) : <div></div>}
+              <div className="w-full">
+                <button type="submit" className="w-full bg-[#2C6E7F] text-white p-2 rounded-lg hover:bg-[#1A4A57] transition-colors flex items-center justify-center h-[42px]">
+                  <Plus className="w-5 h-5 mr-1" /> Adicionar
+                </button>
+              </div>
             </div>
           </form>
         </div>
