@@ -454,9 +454,11 @@ export default function FinanceApp({ session }) {
                     />
                     <Legend 
                       iconType="circle" 
-                      formatter={(value, entry) => {
-                        const { percent } = entry.payload;
-                        return <span className="text-xs font-medium text-gray-700">{value} ({(percent * 100).toFixed(0)}%)</span>;
+                      formatter={(value) => {
+                        const total = pieData.reduce((acc, d) => acc + d.value, 0);
+                        const item = pieData.find(d => d.name === value);
+                        const percent = item ? (item.value / total) * 100 : 0;
+                        return <span className="text-xs font-medium text-gray-700">{value} ({percent.toFixed(0)}%)</span>;
                       }}
                     />
                   </PieChart>
