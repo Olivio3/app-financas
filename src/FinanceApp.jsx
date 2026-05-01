@@ -24,12 +24,26 @@ import {
 import { supabase } from './supabaseClient';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, Legend,
   LineChart, Line
 } from 'recharts';
 
 // --- Utilitários e Constantes ---
-const COLORS = ['#2C6E7F', '#1A4A57', '#4E8D9C', '#7FB5C2', '#B4D2D9', '#E08E79', '#D9A05B', '#6B8E23', '#A0522D'];
+const CATEGORY_COLORS = {
+  'Alimentação': '#E08E79', // Salmão
+  'Moradia': '#1A4A57',    // Azul Escuro
+  'Transporte': '#D9A05B',  // Ouro
+  'Saúde': '#6B8E23',      // Verde Oliva
+  'Lazer': '#4E8D9C',      // Azul Médio
+  'Educação': '#A0522D',   // Marrom
+  'Salário': '#2C6E7F',    // Verde Água/Azul Mar
+  'Freelance': '#7FB5C2',  // Azul Claro
+  'Outros': '#B4D2D9'      // Azul Pálido
+};
+
+const getCategoryColor = (category) => CATEGORY_COLORS[category] || '#94a3b8';
+
+const COLORS = Object.values(CATEGORY_COLORS);
 
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -52,9 +66,9 @@ const TIPOS_INVESTIMENTO = ['Renda Fixa', 'Ações', 'FII', 'Cripto', 'Internaci
 const TooltipIcon = ({ icon: Icon, text, colorClass, position = "bottom" }) => {
   const [show, setShow] = React.useState(false);
   const isTop = position === "top";
-  
+
   return (
-    <div 
+    <div
       className="relative flex items-center justify-center cursor-pointer"
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
@@ -75,13 +89,13 @@ const TooltipIcon = ({ icon: Icon, text, colorClass, position = "bottom" }) => {
 const generateMockData = () => {
   const transactions = [];
   const hoje = new Date();
-  
+
   // Gerar 20 transações nos últimos 3 meses
   for (let i = 0; i < 20; i++) {
     const data = new Date(hoje.getFullYear(), hoje.getMonth() - Math.floor(Math.random() * 3), Math.floor(Math.random() * 28) + 1);
     const isEntrada = Math.random() > 0.7;
     const categoria = isEntrada ? (Math.random() > 0.5 ? 'Salário' : 'Freelance') : CATEGORIAS[Math.floor(Math.random() * 6)];
-    
+
     transactions.push({
       id: i + 1,
       descricao: `Transação de ${categoria}`,
@@ -116,13 +130,13 @@ function financeReducer(state, action) {
     case 'DELETE_TRANSACTION':
       return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
     case 'UPDATE_TRANSACTION':
-      return { 
-        ...state, 
+      return {
+        ...state,
         transactions: state.transactions.map(t => t.id === action.payload.id ? action.payload : t).sort((a, b) => new Date(b.data) - new Date(a.data))
       };
     case 'DELETE_FUTURE_RECURRING':
-      return { 
-        ...state, 
+      return {
+        ...state,
         transactions: state.transactions.filter(t => !(t.frequencia === 'recorrente' && t.descricao === action.payload.descricao && new Date(t.data) >= new Date(action.payload.data)))
       };
     case 'UPDATE_FUTURE_RECURRING':
@@ -184,7 +198,7 @@ export default function FinanceApp({ session }) {
   };
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  
+
   const getDefaultDateForSelectedMonth = React.useCallback(() => {
     const hoje = new Date();
     let dia = hoje.getDate();
@@ -199,14 +213,14 @@ export default function FinanceApp({ session }) {
   }, [getDefaultDateForSelectedMonth]);
 
   // State dos formulários das abas
-  const [novaTransacao, setNovaTransacao] = useState({ 
-    descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', 
+  const [novaTransacao, setNovaTransacao] = useState({
+    descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação',
     data: new Date().toISOString().split('T')[0],
     frequencia: 'pontual', pagamento: 'a vista', parcelas: 1
   });
   const [novoOrcamento, setNovoOrcamento] = useState({ categoria: CATEGORIAS[0], valor: '' });
   const [selectedDay, setSelectedDay] = useState(null);
-  
+
   const [transactionToDelete, setTransactionToDelete] = useState(null);
   const [transactionToEdit, setTransactionToEdit] = useState(null);
   const [originalTxDesc, setOriginalTxDesc] = useState('');
@@ -215,7 +229,7 @@ export default function FinanceApp({ session }) {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!transactionToEdit) return;
-    
+
     if (transactionToEdit.frequencia === 'recorrente' && updateFuture) {
       const { error } = await supabase.from('transactions').update({
         descricao: transactionToEdit.descricao,
@@ -223,19 +237,21 @@ export default function FinanceApp({ session }) {
         tipo: transactionToEdit.tipo,
         categoria: transactionToEdit.categoria
       }).eq('frequencia', 'recorrente').eq('descricao', originalTxDesc).gte('data', transactionToEdit.data);
-      
+
       if (error) {
         console.error("Erro ao atualizar lote:", error);
         alert("Erro ao editar em lote: " + error.message);
       } else {
-        dispatch({ type: 'UPDATE_FUTURE_RECURRING', payload: {
-          originalDescricao: originalTxDesc,
-          data: transactionToEdit.data,
-          newDescricao: transactionToEdit.descricao,
-          newValor: parseFloat(transactionToEdit.valor),
-          newCategoria: transactionToEdit.categoria,
-          newTipo: transactionToEdit.tipo
-        }});
+        dispatch({
+          type: 'UPDATE_FUTURE_RECURRING', payload: {
+            originalDescricao: originalTxDesc,
+            data: transactionToEdit.data,
+            newDescricao: transactionToEdit.descricao,
+            newValor: parseFloat(transactionToEdit.valor),
+            newCategoria: transactionToEdit.categoria,
+            newTipo: transactionToEdit.tipo
+          }
+        });
         setTransactionToEdit(null);
       }
     } else {
@@ -260,14 +276,14 @@ export default function FinanceApp({ session }) {
 
   const confirmDelete = async (future = false) => {
     if (!transactionToDelete) return;
-    
+
     if (future) {
       const { error } = await supabase.from('transactions')
         .delete()
         .eq('frequencia', 'recorrente')
         .eq('descricao', transactionToDelete.descricao)
         .gte('data', transactionToDelete.data);
-        
+
       if (error) {
         console.error("Erro ao deletar lote:", error);
         alert("Erro ao apagar: " + error.message);
@@ -287,7 +303,7 @@ export default function FinanceApp({ session }) {
     }
     setTransactionToDelete(null);
   };
-  
+
   // Cálculos Globais Filtrados
   const filteredTransactions = useMemo(() => {
     return state.transactions.filter(t => {
@@ -326,7 +342,7 @@ export default function FinanceApp({ session }) {
         acc[curr.categoria] = (acc[curr.categoria] || 0) + curr.valor;
         return acc;
       }, {});
-    
+
     const pieData = Object.keys(gastosPorCategoria).map(key => ({ name: key, value: gastosPorCategoria[key] }));
 
     // Previsões e Faturas
@@ -338,10 +354,10 @@ export default function FinanceApp({ session }) {
     const faturasFuturas = state.transactions
       .filter(t => t.tipo === 'Saída' && t.forma_pagamento === 'parcelado')
       .filter(t => {
-         if (!t.data) return false;
-         const [ano, mes] = t.data.split('-');
-         const tDate = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, 1);
-         return tDate > dataAtual;
+        if (!t.data) return false;
+        const [ano, mes] = t.data.split('-');
+        const tDate = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, 1);
+        return tDate > dataAtual;
       })
       .reduce((acc, curr) => acc + curr.valor, 0);
 
@@ -418,11 +434,26 @@ export default function FinanceApp({ session }) {
             <div className="h-64">
               {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                  <PieChart margin={{ top: 0, right: 30, left: 30, bottom: 0 }}>
+                    <Pie
+                      data={pieData}
+                      innerRadius={60}
+                      outerRadius={75}
+                      paddingAngle={5}
+                      dataKey="value"
+                      labelLine={false}
+                      label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                    >
+                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={getCategoryColor(entry.name)} />)}
                     </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                    <Tooltip
+                      formatter={(value, name) => {
+                        const total = pieData.reduce((acc, d) => acc + d.value, 0);
+                        const percent = ((value / total) * 100).toFixed(1);
+                        return [`${formatCurrency(value)} (${percent}%)`, name];
+                      }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
@@ -502,7 +533,7 @@ export default function FinanceApp({ session }) {
       } else if (novaTransacao.frequencia === 'recorrente') {
         numParcelas = 12; // Replicar por 12 meses para garantir um ano de contas
       }
-      
+
       const transactionsToInsert = [];
       const [anoStr, mesStr, diaStr] = novaTransacao.data.split('-');
       const ano = parseInt(anoStr, 10);
@@ -517,14 +548,14 @@ export default function FinanceApp({ session }) {
           m = ((m - 1) % 12) + 1;
         }
         const dataStr = `${y}-${m.toString().padStart(2, '0')}-${dia.toString().padStart(2, '0')}`;
-        
+
         let valorFinal = valorParcela;
         if (isParcelado && i === numParcelas - 1 && numParcelas > 1) {
-            valorFinal = parseFloat((valorTotal - (valorParcela * (numParcelas - 1))).toFixed(2));
+          valorFinal = parseFloat((valorTotal - (valorParcela * (numParcelas - 1))).toFixed(2));
         }
 
         transactionsToInsert.push({
-          descricao: isParcelado ? `${novaTransacao.descricao} (${i+1}/${numParcelas})` : novaTransacao.descricao,
+          descricao: isParcelado ? `${novaTransacao.descricao} (${i + 1}/${numParcelas})` : novaTransacao.descricao,
           valor: valorFinal,
           tipo: novaTransacao.tipo,
           categoria: novaTransacao.categoria,
@@ -538,13 +569,13 @@ export default function FinanceApp({ session }) {
       }
 
       const { data, error } = await supabase.from('transactions').insert(transactionsToInsert).select();
-      
+
       if (error) {
         console.error("Erro do Supabase:", error);
         alert("Erro ao salvar transação: " + error.message + " (Você já rodou o script SQL das novas colunas?)");
       } else if (data) {
         data.forEach(t => {
-            dispatch({ type: 'ADD_TRANSACTION', payload: t });
+          dispatch({ type: 'ADD_TRANSACTION', payload: t });
         });
         setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: getDefaultDateForSelectedMonth(), frequencia: 'pontual', pagamento: 'a vista', parcelas: 1 });
       }
@@ -558,42 +589,42 @@ export default function FinanceApp({ session }) {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                <input type="text" required value={novaTransacao.descricao} onChange={e => setNovaTransacao({...novaTransacao, descricao: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="Ex: Supermercado" />
+                <input type="text" required value={novaTransacao.descricao} onChange={e => setNovaTransacao({ ...novaTransacao, descricao: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="Ex: Supermercado" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Data da 1ª Parcela</label>
-                <input type="date" required value={novaTransacao.data} onChange={e => setNovaTransacao({...novaTransacao, data: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" />
+                <input type="date" required value={novaTransacao.data} onChange={e => setNovaTransacao({ ...novaTransacao, data: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total (R$)</label>
-                <input type="number" step="0.01" required value={novaTransacao.valor} onChange={e => setNovaTransacao({...novaTransacao, valor: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
+                <input type="number" step="0.01" required value={novaTransacao.valor} onChange={e => setNovaTransacao({ ...novaTransacao, valor: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
               </div>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({...novaTransacao, tipo: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({ ...novaTransacao, tipo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
                   <option value="Saída">Saída</option>
                   <option value="Entrada">Entrada</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                <select value={novaTransacao.categoria} onChange={e => setNovaTransacao({...novaTransacao, categoria: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                <select value={novaTransacao.categoria} onChange={e => setNovaTransacao({ ...novaTransacao, categoria: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
                   {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
-                <select disabled={novaTransacao.pagamento === 'parcelado'} value={novaTransacao.frequencia} onChange={e => setNovaTransacao({...novaTransacao, frequencia: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] disabled:bg-gray-100">
+                <select disabled={novaTransacao.pagamento === 'parcelado'} value={novaTransacao.frequencia} onChange={e => setNovaTransacao({ ...novaTransacao, frequencia: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] disabled:bg-gray-100">
                   <option value="pontual">Pontual</option>
                   <option value="recorrente">Mensal Fixa</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>
-                <select value={novaTransacao.pagamento} onChange={e => setNovaTransacao({...novaTransacao, pagamento: e.target.value, frequencia: e.target.value === 'parcelado' ? 'pontual' : novaTransacao.frequencia})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                <select value={novaTransacao.pagamento} onChange={e => setNovaTransacao({ ...novaTransacao, pagamento: e.target.value, frequencia: e.target.value === 'parcelado' ? 'pontual' : novaTransacao.frequencia })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
                   <option value="a vista">À vista</option>
                   <option value="parcelado">Parcelado</option>
                 </select>
@@ -601,7 +632,7 @@ export default function FinanceApp({ session }) {
               {novaTransacao.pagamento === 'parcelado' ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Qtd Parcelas</label>
-                  <input type="number" min="2" max="120" required value={novaTransacao.parcelas} onChange={e => setNovaTransacao({...novaTransacao, parcelas: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="10" />
+                  <input type="number" min="2" max="120" required value={novaTransacao.parcelas} onChange={e => setNovaTransacao({ ...novaTransacao, parcelas: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="10" />
                 </div>
               ) : <div></div>}
               <div className="w-full">
@@ -631,7 +662,12 @@ export default function FinanceApp({ session }) {
                   <tr key={t.id} className="hover:bg-[#fcf9f2]">
                     <td className="p-4 text-gray-600">{t.data ? t.data.split('-').reverse().join('/') : ''}</td>
                     <td className="p-4 font-medium text-[#1C2B2D]">{t.descricao}</td>
-                    <td className="p-4 text-gray-600">{t.categoria}</td>
+                    <td className="p-4 text-gray-600">
+                      <div className="flex items-center">
+                        <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: getCategoryColor(t.categoria) }}></span>
+                        {t.categoria}
+                      </div>
+                    </td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.tipo === 'Entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {t.tipo}
@@ -665,7 +701,7 @@ export default function FinanceApp({ session }) {
     // Evolução diária do saldo no mês
     const diasNoMes = new Date(selectedYear, selectedMonth, 0).getDate();
     let saldoAcumulado = 0;
-    
+
     // Calcula saldo anterior ao mês selecionado para o acumulado
     saldoAcumulado = state.transactions.filter(t => {
       if (!t.data) return false;
@@ -682,7 +718,7 @@ export default function FinanceApp({ session }) {
     for (let i = 1; i <= diasNoMes; i++) {
       const transDia = filteredTransactions.filter(t => t.data && parseInt(t.data.split('-')[2], 10) === i);
       const valDia = transDia.reduce((acc, t) => t.tipo === 'Entrada' ? acc + t.valor : acc - t.valor, 0);
-      
+
       const isFutureDay = isMesFuturo || (isMesAtual && i > hoje.getDate());
 
       if (!isFutureDay) {
@@ -698,8 +734,8 @@ export default function FinanceApp({ session }) {
       acc[t.categoria] = (acc[t.categoria] || 0) + t.valor;
       return acc;
     }, {});
-    
-    const arrayCat = Object.keys(gastosCat).map(k => ({ categoria: k, total: gastosCat[k] })).sort((a,b) => b.total - a.total);
+
+    const arrayCat = Object.keys(gastosCat).map(k => ({ categoria: k, total: gastosCat[k] })).sort((a, b) => b.total - a.total);
     const maiorGasto = arrayCat.length > 0 ? arrayCat[0] : null;
 
     return (
@@ -737,18 +773,18 @@ export default function FinanceApp({ session }) {
                 <XAxis dataKey="dia" axisLine={false} tickLine={false} />
                 <YAxis axisLine={false} tickLine={false} width={80} interval={0} domain={[0, 6000]} ticks={[100, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]} tickFormatter={(val) => formatCompactCurrency(val)} />
                 <Tooltip formatter={(value) => formatCurrency(value)} labelFormatter={(label) => `Dia ${label}`} />
-                <Line 
-                  type="monotone" 
-                  dataKey="saldo" 
-                  stroke="#2C6E7F" 
-                  strokeWidth={3} 
+                <Line
+                  type="monotone"
+                  dataKey="saldo"
+                  stroke="#2C6E7F"
+                  strokeWidth={3}
                   dot={(props) => {
                     if (isMesAtual && props.payload.dia === hoje.getDate()) {
                       return <circle key={props.key} cx={props.cx} cy={props.cy} r={5} fill="#2C6E7F" stroke="white" strokeWidth={2} />;
                     }
                     return null;
                   }}
-                  activeDot={{ r: 8 }} 
+                  activeDot={{ r: 8 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -780,7 +816,7 @@ export default function FinanceApp({ session }) {
     const handleAddBudget = async (e) => {
       e.preventDefault();
       if (!novoOrcamento.valor) return;
-      
+
       const newBudget = {
         categoria: novoOrcamento.categoria,
         valor: parseFloat(novoOrcamento.valor),
@@ -831,13 +867,13 @@ export default function FinanceApp({ session }) {
           <form onSubmit={handleAddBudget} className="flex gap-4 items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-              <select value={novoOrcamento.categoria} onChange={e => setNovoOrcamento({...novoOrcamento, categoria: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+              <select value={novoOrcamento.categoria} onChange={e => setNovoOrcamento({ ...novoOrcamento, categoria: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
                 {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Valor Limite (R$)</label>
-              <input type="number" step="0.01" required value={novoOrcamento.valor} onChange={e => setNovoOrcamento({...novoOrcamento, valor: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
+              <input type="number" step="0.01" required value={novoOrcamento.valor} onChange={e => setNovoOrcamento({ ...novoOrcamento, valor: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
             </div>
             <button type="submit" className="bg-[#2C6E7F] text-white p-2 px-6 rounded-lg hover:bg-[#1A4A57] transition-colors h-[42px]">
               Salvar
@@ -855,18 +891,27 @@ export default function FinanceApp({ session }) {
             return (
               <div key={budget.id} className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div className="flex justify-between items-center mb-2">
-                  <h4 className="font-bold text-[#1C2B2D]">{budget.categoria}</h4>
-                  {isOver && <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Estourou</span>}
-                  {isWarning && <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full">Atenção</span>}
+                  <div className="flex items-center">
+                    <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: getCategoryColor(budget.categoria) }}></span>
+                    <h4 className="font-bold text-[#1C2B2D]">{budget.categoria}</h4>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-xs font-bold ${isOver ? 'text-red-600' : 'text-gray-500'}`}>{percentual.toFixed(0)}%</span>
+                    {isOver && <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full flex items-center"><AlertCircle className="w-3 h-3 mr-1" /> Estourou</span>}
+                    {isWarning && <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full">Atenção</span>}
+                  </div>
                 </div>
-                
+
                 <div className="w-full bg-gray-200 rounded-full h-3 mb-2 overflow-hidden">
-                  <div 
-                    className={`h-3 rounded-full ${isOver ? 'bg-red-500' : isWarning ? 'bg-yellow-500' : 'bg-[#2C6E7F]'}`} 
-                    style={{ width: `${Math.min(100, percentual)}%` }}
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500`}
+                    style={{
+                      width: `${Math.min(100, percentual)}%`,
+                      backgroundColor: isOver ? '#ef4444' : isWarning ? '#f59e0b' : getCategoryColor(budget.categoria)
+                    }}
                   ></div>
                 </div>
-                
+
                 <div className="flex justify-between text-sm text-gray-600 mt-3">
                   <span>Gasto: {formatCurrency(gasto)}</span>
                   <span>Orçado: {formatCurrency(budget.valor)}</span>
@@ -912,8 +957,8 @@ export default function FinanceApp({ session }) {
               const hasTrans = transDoDia.length > 0;
 
               return (
-                <div 
-                  key={dia} 
+                <div
+                  key={dia}
                   onClick={() => hasTrans && setSelectedDay({ dia, transacoes: transDoDia })}
                   className={`p-2 border rounded-xl min-h-[80px] flex flex-col justify-between transition-all ${hasTrans ? 'cursor-pointer hover:border-[#2C6E7F] bg-white border-gray-200' : 'border-gray-100 bg-gray-50 opacity-50'}`}
                 >
@@ -1025,7 +1070,7 @@ export default function FinanceApp({ session }) {
           <h2 className="font-playfair text-2xl font-bold text-[#1C2B2D]">
             {navItems.find(i => i.id === activeTab)?.label}
           </h2>
-          
+
           <div className="flex items-center space-x-4 bg-white p-1 rounded-xl shadow-sm border border-gray-100">
             <button onClick={() => {
               if (selectedMonth === 1) { setSelectedMonth(12); setSelectedYear(y => y - 1); }
@@ -1065,11 +1110,11 @@ export default function FinanceApp({ session }) {
               </div>
               <h3 className="text-xl font-playfair font-bold text-center text-[#1C2B2D] mb-2">Excluir Transação</h3>
               <p className="text-center text-gray-500 mb-6">
-                {transactionToDelete.frequencia === 'recorrente' 
-                  ? 'Esta é uma transação Mensal Fixa. Deseja excluir apenas este lançamento ou todas as futuras cobranças também?' 
+                {transactionToDelete.frequencia === 'recorrente'
+                  ? 'Esta é uma transação Mensal Fixa. Deseja excluir apenas este lançamento ou todas as futuras cobranças também?'
                   : 'Tem certeza que deseja apagar? Esta ação não pode ser desfeita.'}
               </p>
-              
+
               {transactionToDelete.frequencia === 'recorrente' ? (
                 <div className="flex flex-col gap-3">
                   <button onClick={() => confirmDelete(true)} className="w-full py-2 rounded-xl text-white bg-red-600 hover:bg-red-700 font-medium transition-colors">
@@ -1106,29 +1151,29 @@ export default function FinanceApp({ session }) {
               <form onSubmit={handleEditSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                  <input type="text" required value={transactionToEdit.descricao} onChange={e => setTransactionToEdit({...transactionToEdit, descricao: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] focus:border-transparent outline-none transition-all" />
+                  <input type="text" required value={transactionToEdit.descricao} onChange={e => setTransactionToEdit({ ...transactionToEdit, descricao: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] focus:border-transparent outline-none transition-all" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Valor</label>
-                    <input type="number" step="0.01" required value={transactionToEdit.valor} onChange={e => setTransactionToEdit({...transactionToEdit, valor: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none" />
+                    <input type="number" step="0.01" required value={transactionToEdit.valor} onChange={e => setTransactionToEdit({ ...transactionToEdit, valor: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                    <input type="date" disabled={transactionToEdit.frequencia === 'recorrente' && updateFuture} required value={transactionToEdit.data} onChange={e => setTransactionToEdit({...transactionToEdit, data: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none disabled:opacity-50" />
+                    <input type="date" disabled={transactionToEdit.frequencia === 'recorrente' && updateFuture} required value={transactionToEdit.data} onChange={e => setTransactionToEdit({ ...transactionToEdit, data: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none disabled:opacity-50" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                    <select value={transactionToEdit.tipo} onChange={e => setTransactionToEdit({...transactionToEdit, tipo: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
+                    <select value={transactionToEdit.tipo} onChange={e => setTransactionToEdit({ ...transactionToEdit, tipo: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
                       <option value="Saída">Saída</option>
                       <option value="Entrada">Entrada</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                    <select value={transactionToEdit.categoria} onChange={e => setTransactionToEdit({...transactionToEdit, categoria: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
+                    <select value={transactionToEdit.categoria} onChange={e => setTransactionToEdit({ ...transactionToEdit, categoria: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
                       {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
@@ -1136,8 +1181,8 @@ export default function FinanceApp({ session }) {
 
                 {transactionToEdit.frequencia === 'recorrente' && (
                   <div className="mt-4 bg-blue-50 text-blue-800 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       id="updateFuture"
                       checked={updateFuture}
                       onChange={(e) => setUpdateFuture(e.target.checked)}
