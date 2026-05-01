@@ -440,7 +440,7 @@ export default function FinanceApp({ session }) {
                   <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500 transition-colors">
                     <Edit2 className="w-5 h-5" />
                   </button>
-                  <button onClick={() => setTransactionToDelete(t.id)} className="text-gray-400 hover:text-red-500 transition-colors">
+                  <button onClick={() => setTransactionToDelete(t)} className="text-gray-400 hover:text-red-500 transition-colors">
                     <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
@@ -610,7 +610,7 @@ export default function FinanceApp({ session }) {
                       <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500 transition-colors">
                         <Edit2 className="w-5 h-5" />
                       </button>
-                      <button onClick={() => setTransactionToDelete(t.id)} className="text-gray-400 hover:text-red-500 transition-colors">
+                      <button onClick={() => setTransactionToDelete(t)} className="text-gray-400 hover:text-red-500 transition-colors">
                         <Trash2 className="w-5 h-5" />
                       </button>
                     </td>
