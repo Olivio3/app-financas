@@ -49,6 +49,28 @@ const formatCompactCurrency = (value) => {
 const CATEGORIAS = ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Salário', 'Freelance', 'Outros'];
 const TIPOS_INVESTIMENTO = ['Renda Fixa', 'Ações', 'FII', 'Cripto', 'Internacional'];
 
+const TooltipIcon = ({ icon: Icon, text, colorClass, position = "bottom" }) => {
+  const [show, setShow] = React.useState(false);
+  const isTop = position === "top";
+  
+  return (
+    <div 
+      className="relative flex items-center justify-center cursor-pointer"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onClick={() => setShow(!show)}
+      tabIndex="0"
+      onBlur={() => setShow(false)}
+    >
+      <Icon className={`${colorClass} w-5 h-5 transition-transform ${show ? 'scale-110' : ''}`} />
+      <div className={`absolute ${isTop ? 'bottom-full mb-2' : 'top-full mt-2'} right-0 lg:-translate-x-1/2 lg:right-auto lg:left-1/2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg shadow-xl transition-all z-50 text-center font-normal tracking-wide ${show ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+        {text}
+        <div className={`absolute ${isTop ? 'top-full border-t-gray-800' : 'bottom-full border-b-gray-800'} right-2 lg:right-auto lg:left-1/2 lg:-translate-x-1/2 border-4 border-transparent`}></div>
+      </div>
+    </div>
+  );
+};
+
 // --- Dados Iniciais de Exemplo ---
 const generateMockData = () => {
   const transactions = [];
@@ -347,28 +369,28 @@ export default function FinanceApp({ session }) {
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-500">Saldo Total</span>
-              <Wallet className="text-[#2C6E7F] w-5 h-5" />
+              <TooltipIcon icon={Wallet} colorClass="text-[#2C6E7F]" text="Soma de todas as entradas e saídas até o mês selecionado." />
             </div>
             <div className="text-2xl font-playfair font-bold text-[#1C2B2D]">{formatCurrency(saldoTotal)}</div>
           </div>
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-500">Saldo do Mês</span>
-              <Activity className="text-[#E08E79] w-5 h-5" />
+              <TooltipIcon icon={Activity} colorClass="text-[#E08E79]" text="Resultado de entradas menos saídas apenas do mês selecionado." />
             </div>
             <div className={`text-2xl font-playfair font-bold ${saldoAtualMes >= 0 ? 'text-[#1A4A57]' : 'text-red-700'}`}>{formatCurrency(saldoAtualMes)}</div>
           </div>
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-500">Entradas (Mês)</span>
-              <ArrowUpCircle className="text-green-600 w-5 h-5" />
+              <TooltipIcon icon={ArrowUpCircle} colorClass="text-green-600" text="Total de receitas cadastradas no mês selecionado." />
             </div>
             <div className="text-2xl font-playfair font-bold text-green-700">{formatCurrency(totaisMes.entradas)}</div>
           </div>
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-500">Saídas (Mês)</span>
-              <ArrowDownCircle className="text-red-600 w-5 h-5" />
+              <TooltipIcon icon={ArrowDownCircle} colorClass="text-red-600" text="Total de despesas cadastradas no mês selecionado." />
             </div>
             <div className="text-2xl font-playfair font-bold text-red-700">{formatCurrency(totaisMes.saidas)}</div>
           </div>
@@ -946,9 +968,9 @@ export default function FinanceApp({ session }) {
   const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
   return (
-    <div className="flex h-screen overflow-hidden font-dm">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#1C2B2D] text-white flex flex-col">
+    <div className="flex flex-col md:flex-row h-screen overflow-hidden font-dm bg-[#F5F0E8]">
+      {/* Sidebar for Desktop */}
+      <aside className="hidden md:flex w-64 bg-[#1C2B2D] text-white flex-col z-20">
         <div className="p-6">
           <h1 className="font-playfair text-2xl font-bold flex items-center text-[#FDFAF4]">
             <Wallet className="mr-2 text-[#7FB5C2]" /> No Azul
@@ -977,8 +999,27 @@ export default function FinanceApp({ session }) {
         </div>
       </aside>
 
+      {/* Bottom Nav for Mobile */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#1C2B2D] text-white flex justify-around p-2 pb-safe z-50 rounded-t-2xl shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)]">
+        {navItems.map((item) => {
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex flex-col items-center p-2 rounded-xl transition-all ${isActive ? 'text-white' : 'text-gray-400'}`}
+            >
+              <div className={`p-1.5 rounded-lg ${isActive ? 'bg-[#2C6E7F]' : ''}`}>
+                {item.icon}
+              </div>
+              <span className="text-[10px] mt-1 font-medium">{item.label.split(' ')[0]}</span>
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[#F5F0E8]">
+      <main className="flex-1 flex flex-col overflow-hidden bg-[#F5F0E8] pb-20 md:pb-0">
         {/* Header Fix */}
         <header className="bg-[#FDFAF4] border-b border-gray-200 p-4 px-8 flex justify-between items-center shadow-sm z-10">
           <h2 className="font-playfair text-2xl font-bold text-[#1C2B2D]">
