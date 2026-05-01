@@ -107,7 +107,7 @@ const generateMockData = () => {
   }
 
   return {
-    transactions: transactions.sort((a, b) => new Date(b.data) - new Date(a.data)),
+    transactions: transactions.sort((a, b) => b.data.localeCompare(a.data)),
     budgets: [
       { id: 1, categoria: 'Alimentação', valor: 1500, mes: hoje.getMonth() + 1, ano: hoje.getFullYear() },
       { id: 2, categoria: 'Moradia', valor: 2500, mes: hoje.getMonth() + 1, ano: hoje.getFullYear() },
@@ -126,24 +126,24 @@ function financeReducer(state, action) {
     case 'SET_DATA':
       return { ...state, ...action.payload };
     case 'ADD_TRANSACTION':
-      return { ...state, transactions: [action.payload, ...state.transactions].sort((a, b) => new Date(b.data) - new Date(a.data)) };
+      return { ...state, transactions: [action.payload, ...state.transactions].sort((a, b) => b.data.localeCompare(a.data)) };
     case 'DELETE_TRANSACTION':
       return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
     case 'UPDATE_TRANSACTION':
       return {
         ...state,
-        transactions: state.transactions.map(t => t.id === action.payload.id ? action.payload : t).sort((a, b) => new Date(b.data) - new Date(a.data))
+        transactions: state.transactions.map(t => t.id === action.payload.id ? action.payload : t).sort((a, b) => b.data.localeCompare(a.data))
       };
     case 'DELETE_FUTURE_RECURRING':
       return {
         ...state,
-        transactions: state.transactions.filter(t => !(t.frequencia === 'recorrente' && t.descricao === action.payload.descricao && new Date(t.data) >= new Date(action.payload.data)))
+        transactions: state.transactions.filter(t => !(t.frequencia === 'recorrente' && t.descricao === action.payload.descricao && t.data >= action.payload.data))
       };
     case 'UPDATE_FUTURE_RECURRING':
       return {
         ...state,
         transactions: state.transactions.map(t => {
-          if (t.frequencia === 'recorrente' && t.descricao === action.payload.originalDescricao && new Date(t.data) >= new Date(action.payload.data)) {
+          if (t.frequencia === 'recorrente' && t.descricao === action.payload.originalDescricao && t.data >= action.payload.data) {
             return { ...t, descricao: action.payload.newDescricao, valor: action.payload.newValor, categoria: action.payload.newCategoria, tipo: action.payload.newTipo };
           }
           return t;
@@ -355,9 +355,8 @@ export default function FinanceApp({ session }) {
       .filter(t => t.tipo === 'Saída' && t.forma_pagamento === 'parcelado')
       .filter(t => {
         if (!t.data) return false;
-        const [ano, mes] = t.data.split('-');
-        const tDate = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, 1);
-        return tDate > dataAtual;
+        const [ano, mes] = t.data.split('-').map(Number);
+        return (ano > selectedYear) || (ano === selectedYear && mes > selectedMonth);
       })
       .reduce((acc, curr) => acc + curr.valor, 0);
 
@@ -370,8 +369,9 @@ export default function FinanceApp({ session }) {
 
     const barData = last6Months.map(m => {
       const transMes = state.transactions.filter(t => {
-        const d = new Date(t.data);
-        return (d.getMonth() + 1) === m.mes && d.getFullYear() === m.ano;
+        if (!t.data) return false;
+        const [ano, mes] = t.data.split('-').map(Number);
+        return mes === m.mes && ano === m.ano;
       });
       const ent = transMes.filter(t => t.tipo === 'Entrada').reduce((sum, t) => sum + t.valor, 0);
       const sai = transMes.filter(t => t.tipo === 'Saída').reduce((sum, t) => sum + t.valor, 0);
