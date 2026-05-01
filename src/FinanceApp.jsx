@@ -381,34 +381,34 @@ export default function FinanceApp({ session }) {
     return (
       <div className="space-y-6">
         {/* Cards Superiores */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-500">Saldo Total</span>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <div className="bg-[#FDFAF4] p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-1 md:mb-2">
+              <span className="text-[11px] md:text-sm font-medium text-gray-500 uppercase tracking-wider">Saldo Total</span>
               <TooltipIcon icon={Wallet} colorClass="text-[#2C6E7F]" text="Soma de todas as entradas e saídas até o mês selecionado." />
             </div>
-            <div className="text-2xl font-playfair font-bold text-[#1C2B2D]">{formatCurrency(saldoTotal)}</div>
+            <div className="text-lg md:text-2xl font-playfair font-bold text-[#1C2B2D] truncate">{formatCurrency(saldoTotal)}</div>
           </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-500">Saldo do Mês</span>
+          <div className="bg-[#FDFAF4] p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-1 md:mb-2">
+              <span className="text-[11px] md:text-sm font-medium text-gray-500 uppercase tracking-wider">Saldo do Mês</span>
               <TooltipIcon icon={Activity} colorClass="text-[#E08E79]" text="Resultado de entradas menos saídas apenas do mês selecionado." />
             </div>
-            <div className={`text-2xl font-playfair font-bold ${saldoAtualMes >= 0 ? 'text-[#1A4A57]' : 'text-red-700'}`}>{formatCurrency(saldoAtualMes)}</div>
+            <div className={`text-lg md:text-2xl font-playfair font-bold truncate ${saldoAtualMes >= 0 ? 'text-[#1A4A57]' : 'text-red-700'}`}>{formatCurrency(saldoAtualMes)}</div>
           </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-500">Entradas (Mês)</span>
+          <div className="bg-[#FDFAF4] p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-1 md:mb-2">
+              <span className="text-[11px] md:text-sm font-medium text-gray-500 uppercase tracking-wider">Entradas</span>
               <TooltipIcon icon={ArrowUpCircle} colorClass="text-green-600" text="Total de receitas cadastradas no mês selecionado." />
             </div>
-            <div className="text-2xl font-playfair font-bold text-green-700">{formatCurrency(totaisMes.entradas)}</div>
+            <div className="text-lg md:text-2xl font-playfair font-bold text-green-700 truncate">{formatCurrency(totaisMes.entradas)}</div>
           </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-500">Saídas (Mês)</span>
+          <div className="bg-[#FDFAF4] p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-1 md:mb-2">
+              <span className="text-[11px] md:text-sm font-medium text-gray-500 uppercase tracking-wider">Saídas</span>
               <TooltipIcon icon={ArrowDownCircle} colorClass="text-red-600" text="Total de despesas cadastradas no mês selecionado." />
             </div>
-            <div className="text-2xl font-playfair font-bold text-red-700">{formatCurrency(totaisMes.saidas)}</div>
+            <div className="text-lg md:text-2xl font-playfair font-bold text-red-700 truncate">{formatCurrency(totaisMes.saidas)}</div>
           </div>
         </div>
 
@@ -601,7 +601,7 @@ export default function FinanceApp({ session }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4 items-end">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
                 <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({ ...novaTransacao, tipo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
@@ -645,7 +645,7 @@ export default function FinanceApp({ session }) {
         </div>
 
         <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
@@ -691,6 +691,40 @@ export default function FinanceApp({ session }) {
             {filteredTransactions.length === 0 && (
               <div className="p-8 text-center text-gray-500">Nenhuma transação encontrada neste mês.</div>
             )}
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {filteredTransactions.map(t => (
+              <div key={t.id} className="p-4 flex justify-between items-center bg-[#FDFAF4]">
+                <div className="flex-1 min-w-0 mr-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider">{t.data ? t.data.split('-').reverse().join('/') : ''}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${t.tipo === 'Entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {t.tipo}
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-[#1C2B2D] truncate">{t.descricao}</h4>
+                  <div className="flex items-center text-xs text-gray-500 mt-1">
+                    <span className="w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: getCategoryColor(t.categoria) }}></span>
+                    {t.categoria}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`font-bold ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(t.valor)}
+                  </div>
+                  <div className="flex justify-end space-x-3 mt-2">
+                    <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setTransactionToDelete(t)} className="text-gray-400 hover:text-red-500">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
