@@ -381,20 +381,17 @@ export default function FinanceApp({ session }) {
     return (
       <div className="space-y-6">
         {/* Cards Superiores */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          <div className="bg-[#FDFAF4] p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-1 md:mb-2">
-              <span className="text-[11px] md:text-sm font-medium text-gray-500 uppercase tracking-wider">Saldo Total</span>
-              <TooltipIcon icon={Wallet} colorClass="text-[#2C6E7F]" text="Soma de todas as entradas e saídas até o mês selecionado." />
-            </div>
-            <div className="text-lg md:text-2xl font-playfair font-bold text-[#1C2B2D] truncate">{formatCurrency(saldoTotal)}</div>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
           <div className="bg-[#FDFAF4] p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-1 md:mb-2">
               <span className="text-[11px] md:text-sm font-medium text-gray-500 uppercase tracking-wider">Saldo do Mês</span>
               <TooltipIcon icon={Activity} colorClass="text-[#E08E79]" text="Resultado de entradas menos saídas apenas do mês selecionado." />
             </div>
             <div className={`text-lg md:text-2xl font-playfair font-bold truncate ${saldoAtualMes >= 0 ? 'text-[#1A4A57]' : 'text-red-700'}`}>{formatCurrency(saldoAtualMes)}</div>
+            <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-sm text-gray-500 uppercase font-semibold">Acumulado Total:</span>
+              <span className="text-base font-extrabold text-[#2C6E7F]">{formatCurrency(saldoTotal)}</span>
+            </div>
           </div>
           <div className="bg-[#FDFAF4] p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-1 md:mb-2">
