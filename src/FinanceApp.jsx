@@ -78,16 +78,11 @@ const generateMockData = () => {
       { id: 3, categoria: 'Transporte', valor: 800, mes: hoje.getMonth() + 1, ano: hoje.getFullYear() },
       { id: 4, categoria: 'Lazer', valor: 500, mes: hoje.getMonth() + 1, ano: hoje.getFullYear() },
       { id: 5, categoria: 'Saúde', valor: 400, mes: hoje.getMonth() + 1, ano: hoje.getFullYear() }
-    ],
-    investments: [
-      { id: 1, nome: 'Tesouro Selic', tipo: 'Renda Fixa', valorInvestido: 10000, rentabilidade: 10.5, dataInicio: '2023-01-15' },
-      { id: 2, nome: 'Fundo Imobiliário ABC', tipo: 'FII', valorInvestido: 5000, rentabilidade: 8.2, dataInicio: '2023-06-10' },
-      { id: 3, nome: 'Ações Empresa XYZ', tipo: 'Ações', valorInvestido: 3000, rentabilidade: -2.5, dataInicio: '2023-08-20' }
     ]
   };
 };
 
-const initialState = { transactions: [], budgets: [], investments: [] };
+const initialState = { transactions: [], budgets: [] };
 
 // --- Reducer ---
 function financeReducer(state, action) {
@@ -127,8 +122,6 @@ function financeReducer(state, action) {
         return { ...state, budgets: newBudgets };
       }
       return { ...state, budgets: [...state.budgets, action.payload] };
-    case 'ADD_INVESTMENT':
-      return { ...state, investments: [...state.investments, action.payload] };
     default:
       return state;
   }
@@ -149,18 +142,16 @@ export default function FinanceApp({ session }) {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [transRes, budRes, invRes] = await Promise.all([
+      const [transRes, budRes] = await Promise.all([
         supabase.from('transactions').select('*').eq('user_id', session.user.id).order('data', { ascending: false }),
-        supabase.from('budgets').select('*').eq('user_id', session.user.id),
-        supabase.from('investments').select('*').eq('user_id', session.user.id)
+        supabase.from('budgets').select('*').eq('user_id', session.user.id)
       ]);
 
       dispatch({
         type: 'SET_DATA',
         payload: {
           transactions: transRes.data || [],
-          budgets: budRes.data || [],
-          investments: invRes.data || []
+          budgets: budRes.data || []
         }
       });
     } catch (error) {
@@ -172,6 +163,19 @@ export default function FinanceApp({ session }) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   
+  const getDefaultDateForSelectedMonth = React.useCallback(() => {
+    const hoje = new Date();
+    let dia = hoje.getDate();
+    if (selectedMonth !== hoje.getMonth() + 1 || selectedYear !== hoje.getFullYear()) {
+      dia = 1;
+    }
+    return `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-${dia.toString().padStart(2, '0')}`;
+  }, [selectedMonth, selectedYear]);
+
+  React.useEffect(() => {
+    setNovaTransacao(prev => ({ ...prev, data: getDefaultDateForSelectedMonth() }));
+  }, [getDefaultDateForSelectedMonth]);
+
   // State dos formulários das abas
   const [novaTransacao, setNovaTransacao] = useState({ 
     descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', 
@@ -179,7 +183,6 @@ export default function FinanceApp({ session }) {
     frequencia: 'pontual', pagamento: 'a vista', parcelas: 1
   });
   const [novoOrcamento, setNovoOrcamento] = useState({ categoria: CATEGORIAS[0], valor: '' });
-  const [novoInvest, setNovoInvest] = useState({ nome: '', tipo: TIPOS_INVESTIMENTO[0], valorInvestido: '', rentabilidade: '', dataInicio: new Date().toISOString().split('T')[0] });
   const [selectedDay, setSelectedDay] = useState(null);
   
   const [transactionToDelete, setTransactionToDelete] = useState(null);
@@ -280,8 +283,17 @@ export default function FinanceApp({ session }) {
     }, { entradas: 0, saidas: 0 });
   }, [filteredTransactions]);
 
-  const saldoTotal = state.transactions.reduce((acc, curr) => curr.tipo === 'Entrada' ? acc + curr.valor : acc - curr.valor, 0);
-  const patrimonioInvestimentos = state.investments.reduce((acc, curr) => acc + (curr.valorInvestido * (1 + curr.rentabilidade / 100)), 0);
+  const saldoTotal = React.useMemo(() => {
+    return state.transactions.filter(t => {
+      if (!t.data) return false;
+      const [ano, mes] = t.data.split('-');
+      const tDate = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, 1);
+      const limitDate = new Date(selectedYear, selectedMonth - 1, 1);
+      return tDate <= limitDate;
+    }).reduce((acc, curr) => curr.tipo === 'Entrada' ? acc + curr.valor : acc - curr.valor, 0);
+  }, [state.transactions, selectedMonth, selectedYear]);
+
+  const saldoAtualMes = totaisMes.entradas - totaisMes.saidas;
 
   // --- Sub-componentes (Abas) ---
   const renderDashboard = () => {
@@ -341,6 +353,13 @@ export default function FinanceApp({ session }) {
           </div>
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-500">Saldo do Mês</span>
+              <Activity className="text-[#E08E79] w-5 h-5" />
+            </div>
+            <div className={`text-2xl font-playfair font-bold ${saldoAtualMes >= 0 ? 'text-[#1A4A57]' : 'text-red-700'}`}>{formatCurrency(saldoAtualMes)}</div>
+          </div>
+          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-500">Entradas (Mês)</span>
               <ArrowUpCircle className="text-green-600 w-5 h-5" />
             </div>
@@ -352,13 +371,6 @@ export default function FinanceApp({ session }) {
               <ArrowDownCircle className="text-red-600 w-5 h-5" />
             </div>
             <div className="text-2xl font-playfair font-bold text-red-700">{formatCurrency(totaisMes.saidas)}</div>
-          </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-500">Patrimônio Investido</span>
-              <TrendingUp className="text-[#1A4A57] w-5 h-5" />
-            </div>
-            <div className="text-2xl font-playfair font-bold text-[#1A4A57]">{formatCurrency(patrimonioInvestimentos)}</div>
           </div>
         </div>
 
@@ -512,7 +524,7 @@ export default function FinanceApp({ session }) {
         data.forEach(t => {
             dispatch({ type: 'ADD_TRANSACTION', payload: t });
         });
-        setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: new Date().toISOString().split('T')[0], frequencia: 'pontual', pagamento: 'a vista', parcelas: 1 });
+        setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: getDefaultDateForSelectedMonth(), frequencia: 'pontual', pagamento: 'a vista', parcelas: 1 });
       }
     };
 
@@ -853,138 +865,7 @@ export default function FinanceApp({ session }) {
     );
   };
 
-  const renderInvestimentos = () => {
-    const handleAddInvest = async (e) => {
-      e.preventDefault();
-      if (!novoInvest.nome || !novoInvest.valorInvestido) return;
-      
-      const newInvestment = {
-        ...novoInvest,
-        valorInvestido: parseFloat(novoInvest.valorInvestido),
-        rentabilidade: parseFloat(novoInvest.rentabilidade) || 0,
-        user_id: session.user.id
-      };
 
-      const { data, error } = await supabase.from('investments').insert([newInvestment]).select();
-
-      if (error) {
-        console.error("Erro do Supabase:", error);
-        alert("Erro ao salvar investimento: " + error.message);
-      } else if (data) {
-        dispatch({
-          type: 'ADD_INVESTMENT',
-          payload: data[0]
-        });
-        setNovoInvest({ nome: '', tipo: TIPOS_INVESTIMENTO[0], valorInvestido: '', rentabilidade: '', dataInicio: new Date().toISOString().split('T')[0] });
-      }
-    };
-
-    const totalInvestido = state.investments.reduce((acc, curr) => acc + curr.valorInvestido, 0);
-    const rentabilidadeMedia = state.investments.reduce((acc, curr) => acc + curr.rentabilidade, 0) / (state.investments.length || 1);
-
-    const pieData = state.investments.reduce((acc, curr) => {
-      const existing = acc.find(item => item.name === curr.tipo);
-      if (existing) {
-        existing.value += (curr.valorInvestido * (1 + curr.rentabilidade / 100));
-      } else {
-        acc.push({ name: curr.tipo, value: (curr.valorInvestido * (1 + curr.rentabilidade / 100)) });
-      }
-      return acc;
-    }, []);
-
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
-            <span className="text-sm font-medium text-gray-500">Total Investido</span>
-            <div className="text-2xl font-playfair font-bold text-[#1C2B2D] mt-2">{formatCurrency(totalInvestido)}</div>
-          </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
-            <span className="text-sm font-medium text-gray-500">Rentabilidade Média</span>
-            <div className={`text-2xl font-playfair font-bold mt-2 ${rentabilidadeMedia >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {rentabilidadeMedia.toFixed(2)}%
-            </div>
-          </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
-            <span className="text-sm font-medium text-gray-500">Patrimônio Atual</span>
-            <div className="text-2xl font-playfair font-bold text-[#2C6E7F] mt-2">{formatCurrency(patrimonioInvestimentos)}</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-              <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Novo Investimento</h3>
-              <form onSubmit={handleAddInvest} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Ativo</label>
-                  <input type="text" required value={novoInvest.nome} onChange={e => setNovoInvest({...novoInvest, nome: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                  <select value={novoInvest.tipo} onChange={e => setNovoInvest({...novoInvest, tipo: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2">
-                    {TIPOS_INVESTIMENTO.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Valor Investido (R$)</label>
-                  <input type="number" step="0.01" required value={novoInvest.valorInvestido} onChange={e => setNovoInvest({...novoInvest, valorInvestido: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Rentabilidade Atual (%)</label>
-                  <input type="number" step="0.01" value={novoInvest.rentabilidade} onChange={e => setNovoInvest({...novoInvest, rentabilidade: e.target.value})} className="w-full rounded-lg border-gray-300 border p-2" />
-                </div>
-                <div className="md:col-span-2">
-                  <button type="submit" className="w-full bg-[#1A4A57] text-white p-2 rounded-lg hover:bg-[#2C6E7F] transition-colors">
-                    Adicionar Investimento
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <div className="space-y-4">
-              {state.investments.map(inv => {
-                const valorAtual = inv.valorInvestido * (1 + inv.rentabilidade / 100);
-                return (
-                  <div key={inv.id} className="bg-[#FDFAF4] p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-[#1C2B2D]">{inv.nome}</h4>
-                      <span className="bg-blue-100 text-[#2C6E7F] text-xs px-2 py-1 rounded-full mt-1 inline-block">{inv.tipo}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-500">Investido: {formatCurrency(inv.valorInvestido)}</div>
-                      <div className="font-bold text-[#1C2B2D]">{formatCurrency(valorAtual)}</div>
-                      <div className={`text-xs font-medium ${inv.rentabilidade >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {inv.rentabilidade >= 0 ? '+' : ''}{inv.rentabilidade}%
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Distribuição</h3>
-            <div className="h-64">
-              {pieData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-400">Sem investimentos</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderCalendario = () => {
     const diasNoMes = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -1059,7 +940,6 @@ export default function FinanceApp({ session }) {
     { id: 'transacoes', label: 'Transações', icon: <ArrowRightLeft className="w-5 h-5" /> },
     { id: 'mensal', label: 'Controle Mensal', icon: <Activity className="w-5 h-5" /> },
     { id: 'orcamento', label: 'Orçamento', icon: <Target className="w-5 h-5" /> },
-    { id: 'investimentos', label: 'Investimentos', icon: <TrendingUp className="w-5 h-5" /> },
     { id: 'calendario', label: 'Calendário', icon: <CalendarDays className="w-5 h-5" /> }
   ];
 
@@ -1132,7 +1012,6 @@ export default function FinanceApp({ session }) {
             {activeTab === 'transacoes' && renderTransacoes()}
             {activeTab === 'mensal' && renderControleMensal()}
             {activeTab === 'orcamento' && renderOrcamento()}
-            {activeTab === 'investimentos' && renderInvestimentos()}
             {activeTab === 'calendario' && renderCalendario()}
           </div>
         </div>
