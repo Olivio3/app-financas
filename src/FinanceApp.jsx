@@ -18,7 +18,8 @@ import {
   ChevronRight,
   Filter,
   Calendar as CalendarIcon,
-  LogOut
+  LogOut,
+  Edit2
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
@@ -97,6 +98,26 @@ function financeReducer(state, action) {
       return { ...state, transactions: [action.payload, ...state.transactions].sort((a, b) => new Date(b.data) - new Date(a.data)) };
     case 'DELETE_TRANSACTION':
       return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
+    case 'UPDATE_TRANSACTION':
+      return { 
+        ...state, 
+        transactions: state.transactions.map(t => t.id === action.payload.id ? action.payload : t).sort((a, b) => new Date(b.data) - new Date(a.data))
+      };
+    case 'DELETE_FUTURE_RECURRING':
+      return { 
+        ...state, 
+        transactions: state.transactions.filter(t => !(t.frequencia === 'recorrente' && t.descricao === action.payload.descricao && new Date(t.data) >= new Date(action.payload.data)))
+      };
+    case 'UPDATE_FUTURE_RECURRING':
+      return {
+        ...state,
+        transactions: state.transactions.map(t => {
+          if (t.frequencia === 'recorrente' && t.descricao === action.payload.originalDescricao && new Date(t.data) >= new Date(action.payload.data)) {
+            return { ...t, descricao: action.payload.newDescricao, valor: action.payload.newValor, categoria: action.payload.newCategoria, tipo: action.payload.newTipo };
+          }
+          return t;
+        })
+      };
     case 'ADD_BUDGET':
       // Atualiza se já existir, senão adiciona
       const existingBudgetIdx = state.budgets.findIndex(b => b.categoria === action.payload.categoria && b.mes === action.payload.mes && b.ano === action.payload.ano);
@@ -162,15 +183,82 @@ export default function FinanceApp({ session }) {
   const [selectedDay, setSelectedDay] = useState(null);
   
   const [transactionToDelete, setTransactionToDelete] = useState(null);
+  const [transactionToEdit, setTransactionToEdit] = useState(null);
+  const [originalTxDesc, setOriginalTxDesc] = useState('');
+  const [updateFuture, setUpdateFuture] = useState(false);
 
-  const confirmDelete = async () => {
-    if (!transactionToDelete) return;
-    const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete);
-    if (error) {
-      console.error("Erro ao deletar:", error);
-      alert("Erro ao apagar: " + error.message);
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!transactionToEdit) return;
+    
+    if (transactionToEdit.frequencia === 'recorrente' && updateFuture) {
+      const { error } = await supabase.from('transactions').update({
+        descricao: transactionToEdit.descricao,
+        valor: parseFloat(transactionToEdit.valor),
+        tipo: transactionToEdit.tipo,
+        categoria: transactionToEdit.categoria
+      }).eq('frequencia', 'recorrente').eq('descricao', originalTxDesc).gte('data', transactionToEdit.data);
+      
+      if (error) {
+        console.error("Erro ao atualizar lote:", error);
+        alert("Erro ao editar em lote: " + error.message);
+      } else {
+        dispatch({ type: 'UPDATE_FUTURE_RECURRING', payload: {
+          originalDescricao: originalTxDesc,
+          data: transactionToEdit.data,
+          newDescricao: transactionToEdit.descricao,
+          newValor: parseFloat(transactionToEdit.valor),
+          newCategoria: transactionToEdit.categoria,
+          newTipo: transactionToEdit.tipo
+        }});
+        setTransactionToEdit(null);
+      }
     } else {
-      dispatch({ type: 'DELETE_TRANSACTION', payload: transactionToDelete });
+      const { error } = await supabase.from('transactions').update({
+        descricao: transactionToEdit.descricao,
+        valor: parseFloat(transactionToEdit.valor),
+        data: transactionToEdit.data,
+        tipo: transactionToEdit.tipo,
+        categoria: transactionToEdit.categoria
+      }).eq('id', transactionToEdit.id);
+
+      if (error) {
+        console.error("Erro ao atualizar:", error);
+        alert("Erro ao editar: " + error.message);
+      } else {
+        const updatedTx = { ...transactionToEdit, valor: parseFloat(transactionToEdit.valor) };
+        dispatch({ type: 'UPDATE_TRANSACTION', payload: updatedTx });
+        setTransactionToEdit(null);
+      }
+    }
+  };
+
+  const confirmDelete = async (future = false) => {
+    if (!transactionToDelete) return;
+    
+    if (future) {
+      const { error } = await supabase.from('transactions')
+        .delete()
+        .eq('frequencia', 'recorrente')
+        .eq('descricao', transactionToDelete.descricao)
+        .gte('data', transactionToDelete.data);
+        
+      if (error) {
+        console.error("Erro ao deletar lote:", error);
+        alert("Erro ao apagar: " + error.message);
+      } else {
+        dispatch({ type: 'DELETE_FUTURE_RECURRING', payload: { descricao: transactionToDelete.descricao, data: transactionToDelete.data } });
+        setTransactionToDelete(null);
+      }
+    } else {
+      const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id);
+      if (error) {
+        console.error("Erro ao deletar:", error);
+        alert("Erro ao apagar: " + error.message);
+      } else {
+        dispatch({ type: 'DELETE_TRANSACTION', payload: transactionToDelete.id });
+        setTransactionToDelete(null);
+      }
     }
     setTransactionToDelete(null);
   };
@@ -349,6 +437,9 @@ export default function FinanceApp({ session }) {
                   <div className={`font-medium ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-600'}`}>
                     {t.tipo === 'Entrada' ? '+' : '-'}{formatCurrency(t.valor)}
                   </div>
+                  <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500 transition-colors">
+                    <Edit2 className="w-5 h-5" />
+                  </button>
                   <button onClick={() => setTransactionToDelete(t.id)} className="text-gray-400 hover:text-red-500 transition-colors">
                     <Trash2 className="w-5 h-5" />
                   </button>
@@ -515,7 +606,10 @@ export default function FinanceApp({ session }) {
                     <td className={`p-4 font-medium ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(t.valor)}
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 flex space-x-2">
+                      <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500 transition-colors">
+                        <Edit2 className="w-5 h-5" />
+                      </button>
                       <button onClick={() => setTransactionToDelete(t.id)} className="text-gray-400 hover:text-red-500 transition-colors">
                         <Trash2 className="w-5 h-5" />
                       </button>
@@ -1050,15 +1144,100 @@ export default function FinanceApp({ session }) {
                 <AlertCircle className="w-12 h-12" />
               </div>
               <h3 className="text-xl font-playfair font-bold text-center text-[#1C2B2D] mb-2">Excluir Transação</h3>
-              <p className="text-center text-gray-500 mb-6">Tem certeza que deseja apagar? Esta ação não pode ser desfeita.</p>
-              <div className="flex gap-3">
-                <button onClick={() => setTransactionToDelete(null)} className="flex-1 py-2 rounded-xl text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium transition-colors">
-                  Cancelar
-                </button>
-                <button onClick={confirmDelete} className="flex-1 py-2 rounded-xl text-white bg-red-500 hover:bg-red-600 font-medium transition-colors">
-                  Excluir
-                </button>
+              <p className="text-center text-gray-500 mb-6">
+                {transactionToDelete.frequencia === 'recorrente' 
+                  ? 'Esta é uma transação Mensal Fixa. Deseja excluir apenas este lançamento ou todas as futuras cobranças também?' 
+                  : 'Tem certeza que deseja apagar? Esta ação não pode ser desfeita.'}
+              </p>
+              
+              {transactionToDelete.frequencia === 'recorrente' ? (
+                <div className="flex flex-col gap-3">
+                  <button onClick={() => confirmDelete(true)} className="w-full py-2 rounded-xl text-white bg-red-600 hover:bg-red-700 font-medium transition-colors">
+                    Excluir Esta e Próximas
+                  </button>
+                  <button onClick={() => confirmDelete(false)} className="w-full py-2 rounded-xl text-white bg-red-400 hover:bg-red-500 font-medium transition-colors">
+                    Excluir Somente Esta
+                  </button>
+                  <button onClick={() => setTransactionToDelete(null)} className="w-full py-2 rounded-xl text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium transition-colors mt-2">
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button onClick={() => setTransactionToDelete(null)} className="flex-1 py-2 rounded-xl text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium transition-colors">
+                    Cancelar
+                  </button>
+                  <button onClick={() => confirmDelete(false)} className="flex-1 py-2 rounded-xl text-white bg-red-500 hover:bg-red-600 font-medium transition-colors">
+                    Excluir
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {transactionToEdit && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md border border-gray-100 animate-in fade-in zoom-in duration-200">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-playfair font-bold text-[#1C2B2D]">Editar Transação</h3>
+                <button onClick={() => setTransactionToEdit(null)} className="text-gray-400 hover:text-gray-600">✕</button>
               </div>
+              <form onSubmit={handleEditSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                  <input type="text" required value={transactionToEdit.descricao} onChange={e => setTransactionToEdit({...transactionToEdit, descricao: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] focus:border-transparent outline-none transition-all" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Valor</label>
+                    <input type="number" step="0.01" required value={transactionToEdit.valor} onChange={e => setTransactionToEdit({...transactionToEdit, valor: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                    <input type="date" disabled={transactionToEdit.frequencia === 'recorrente' && updateFuture} required value={transactionToEdit.data} onChange={e => setTransactionToEdit({...transactionToEdit, data: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none disabled:opacity-50" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                    <select value={transactionToEdit.tipo} onChange={e => setTransactionToEdit({...transactionToEdit, tipo: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
+                      <option value="Saída">Saída</option>
+                      <option value="Entrada">Entrada</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                    <select value={transactionToEdit.categoria} onChange={e => setTransactionToEdit({...transactionToEdit, categoria: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
+                      {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {transactionToEdit.frequencia === 'recorrente' && (
+                  <div className="mt-4 bg-blue-50 text-blue-800 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
+                    <input 
+                      type="checkbox" 
+                      id="updateFuture"
+                      checked={updateFuture}
+                      onChange={(e) => setUpdateFuture(e.target.checked)}
+                      className="mt-1 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="updateFuture" className="text-sm font-medium cursor-pointer">
+                      Aplicar as alterações desta transação (Valor, Categoria, Nome) para todas as futuras cobranças desta recorrência.
+                    </label>
+                  </div>
+                )}
+
+                <div className="pt-4 flex gap-3">
+                  <button type="button" onClick={() => setTransactionToEdit(null)} className="flex-1 py-3 rounded-xl text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium transition-colors">
+                    Cancelar
+                  </button>
+                  <button type="submit" className="flex-1 py-3 rounded-xl text-white bg-[#2C6E7F] hover:bg-[#1A4A57] font-medium transition-colors">
+                    Salvar Alterações
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
