@@ -17,8 +17,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  LogOut
 } from 'lucide-react';
+import { supabase } from './supabaseClient';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -76,11 +78,13 @@ const generateMockData = () => {
   };
 };
 
-const initialState = generateMockData();
+const initialState = { transactions: [], budgets: [], investments: [] };
 
 // --- Reducer ---
 function financeReducer(state, action) {
   switch (action.type) {
+    case 'SET_DATA':
+      return { ...state, ...action.payload };
     case 'ADD_TRANSACTION':
       return { ...state, transactions: [action.payload, ...state.transactions].sort((a, b) => new Date(b.data) - new Date(a.data)) };
     case 'DELETE_TRANSACTION':
@@ -102,9 +106,40 @@ function financeReducer(state, action) {
 }
 
 // --- Componente Principal ---
-export default function FinanceApp() {
+export default function FinanceApp({ session }) {
   const [state, dispatch] = useReducer(financeReducer, initialState);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isLoading, setIsLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (session?.user) {
+      loadData();
+    }
+  }, [session]);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [transRes, budRes, invRes] = await Promise.all([
+        supabase.from('transactions').select('*').eq('user_id', session.user.id).order('data', { ascending: false }),
+        supabase.from('budgets').select('*').eq('user_id', session.user.id),
+        supabase.from('investments').select('*').eq('user_id', session.user.id)
+      ]);
+
+      dispatch({
+        type: 'SET_DATA',
+        payload: {
+          transactions: transRes.data || [],
+          budgets: budRes.data || [],
+          investments: invRes.data || []
+        }
+      });
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   
@@ -114,24 +149,12 @@ export default function FinanceApp() {
   const [novoInvest, setNovoInvest] = useState({ nome: '', tipo: TIPOS_INVESTIMENTO[0], valorInvestido: '', rentabilidade: '', dataInicio: new Date().toISOString().split('T')[0] });
   const [selectedDay, setSelectedDay] = useState(null);
   
-  // Fonte via style injectado
-  const globalStyles = `
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Playfair+Display:wght@400;600;700&display=swap');
-    
-    .font-playfair { font-family: 'Playfair Display', serif; }
-    .font-dm { font-family: 'DM Sans', sans-serif; }
-    
-    body {
-      background-color: #F5F0E8;
-      color: #1C2B2D;
-    }
-  `;
-
   // Cálculos Globais Filtrados
   const filteredTransactions = useMemo(() => {
     return state.transactions.filter(t => {
-      const date = new Date(t.data);
-      return (date.getMonth() + 1) === selectedMonth && date.getFullYear() === selectedYear;
+      if (!t.data) return false;
+      const [ano, mes] = t.data.split('-');
+      return parseInt(mes, 10) === selectedMonth && parseInt(ano, 10) === selectedYear;
     });
   }, [state.transactions, selectedMonth, selectedYear]);
 
@@ -259,7 +282,7 @@ export default function FinanceApp() {
                   </div>
                   <div>
                     <p className="font-medium text-[#1C2B2D]">{t.descricao}</p>
-                    <p className="text-xs text-gray-500">{new Date(t.data).toLocaleDateString('pt-BR')} • {t.categoria}</p>
+                    <p className="text-xs text-gray-500">{t.data ? t.data.split('-').reverse().join('/') : ''} • {t.categoria}</p>
                   </div>
                 </div>
                 <div className={`font-medium ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-600'}`}>
@@ -274,18 +297,28 @@ export default function FinanceApp() {
   };
 
   const renderTransacoes = () => {
-    const handleAdd = (e) => {
+    const handleAdd = async (e) => {
       e.preventDefault();
       if (!novaTransacao.descricao || !novaTransacao.valor) return;
-      dispatch({
-        type: 'ADD_TRANSACTION',
-        payload: {
-          ...novaTransacao,
-          id: Date.now(),
-          valor: parseFloat(novaTransacao.valor)
-        }
-      });
-      setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: new Date().toISOString().split('T')[0] });
+      
+      const newTransaction = {
+        ...novaTransacao,
+        valor: parseFloat(novaTransacao.valor),
+        user_id: session.user.id
+      };
+
+      const { data, error } = await supabase.from('transactions').insert([newTransaction]).select();
+      
+      if (error) {
+        console.error("Erro do Supabase:", error);
+        alert("Erro ao salvar transação: " + error.message + " (Você já rodou o script SQL?)");
+      } else if (data) {
+        dispatch({
+          type: 'ADD_TRANSACTION',
+          payload: data[0]
+        });
+        setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: new Date().toISOString().split('T')[0] });
+      }
     };
 
     return (
@@ -342,7 +375,7 @@ export default function FinanceApp() {
               <tbody className="divide-y divide-gray-100">
                 {filteredTransactions.map(t => (
                   <tr key={t.id} className="hover:bg-[#fcf9f2]">
-                    <td className="p-4 text-gray-600">{new Date(t.data).toLocaleDateString('pt-BR')}</td>
+                    <td className="p-4 text-gray-600">{t.data ? t.data.split('-').reverse().join('/') : ''}</td>
                     <td className="p-4 font-medium text-[#1C2B2D]">{t.descricao}</td>
                     <td className="p-4 text-gray-600">{t.categoria}</td>
                     <td className="p-4">
@@ -354,7 +387,10 @@ export default function FinanceApp() {
                       {formatCurrency(t.valor)}
                     </td>
                     <td className="p-4">
-                      <button onClick={() => dispatch({ type: 'DELETE_TRANSACTION', payload: t.id })} className="text-gray-400 hover:text-red-500 transition-colors">
+                      <button onClick={async () => {
+                        const { error } = await supabase.from('transactions').delete().eq('id', t.id);
+                        if (!error) dispatch({ type: 'DELETE_TRANSACTION', payload: t.id });
+                      }} className="text-gray-400 hover:text-red-500 transition-colors">
                         <Trash2 className="w-5 h-5" />
                       </button>
                     </td>
@@ -384,7 +420,7 @@ export default function FinanceApp() {
 
     const lineData = [];
     for (let i = 1; i <= diasNoMes; i++) {
-      const transDia = filteredTransactions.filter(t => new Date(t.data).getDate() === i + 1); // +1 fuso hr ajuste simplificado
+      const transDia = filteredTransactions.filter(t => t.data && parseInt(t.data.split('-')[2], 10) === i);
       const valDia = transDia.reduce((acc, t) => t.tipo === 'Entrada' ? acc + t.valor : acc - t.valor, 0);
       saldoAcumulado += valDia;
       lineData.push({ dia: i, saldo: saldoAcumulado });
@@ -462,20 +498,44 @@ export default function FinanceApp() {
   };
 
   const renderOrcamento = () => {
-    const handleAddBudget = (e) => {
+    const handleAddBudget = async (e) => {
       e.preventDefault();
       if (!novoOrcamento.valor) return;
-      dispatch({
-        type: 'ADD_BUDGET',
-        payload: {
-          id: Date.now(),
-          categoria: novoOrcamento.categoria,
-          valor: parseFloat(novoOrcamento.valor),
-          mes: selectedMonth,
-          ano: selectedYear
-        }
-      });
-      setNovoOrcamento({ categoria: CATEGORIAS[0], valor: '' });
+      
+      const newBudget = {
+        categoria: novoOrcamento.categoria,
+        valor: parseFloat(novoOrcamento.valor),
+        mes: selectedMonth,
+        ano: selectedYear,
+        user_id: session.user.id
+      };
+
+      // Tenta atualizar se já existir
+      const { data: existing } = await supabase.from('budgets')
+        .select('id')
+        .eq('user_id', session.user.id)
+        .eq('categoria', newBudget.categoria)
+        .eq('mes', newBudget.mes)
+        .eq('ano', newBudget.ano)
+        .single();
+
+      let result;
+      if (existing) {
+        result = await supabase.from('budgets').update({ valor: newBudget.valor }).eq('id', existing.id).select();
+      } else {
+        result = await supabase.from('budgets').insert([newBudget]).select();
+      }
+
+      if (result.error) {
+        console.error("Erro do Supabase:", result.error);
+        alert("Erro ao salvar orçamento: " + result.error.message);
+      } else if (result.data) {
+        dispatch({
+          type: 'ADD_BUDGET',
+          payload: result.data[0]
+        });
+        setNovoOrcamento({ categoria: CATEGORIAS[0], valor: '' });
+      }
     };
 
     const budgetsDoMes = state.budgets.filter(b => b.mes === selectedMonth && b.ano === selectedYear);
@@ -549,19 +609,29 @@ export default function FinanceApp() {
   };
 
   const renderInvestimentos = () => {
-    const handleAddInvest = (e) => {
+    const handleAddInvest = async (e) => {
       e.preventDefault();
       if (!novoInvest.nome || !novoInvest.valorInvestido) return;
-      dispatch({
-        type: 'ADD_INVESTMENT',
-        payload: {
-          ...novoInvest,
-          id: Date.now(),
-          valorInvestido: parseFloat(novoInvest.valorInvestido),
-          rentabilidade: parseFloat(novoInvest.rentabilidade) || 0
-        }
-      });
-      setNovoInvest({ nome: '', tipo: TIPOS_INVESTIMENTO[0], valorInvestido: '', rentabilidade: '', dataInicio: new Date().toISOString().split('T')[0] });
+      
+      const newInvestment = {
+        ...novoInvest,
+        valorInvestido: parseFloat(novoInvest.valorInvestido),
+        rentabilidade: parseFloat(novoInvest.rentabilidade) || 0,
+        user_id: session.user.id
+      };
+
+      const { data, error } = await supabase.from('investments').insert([newInvestment]).select();
+
+      if (error) {
+        console.error("Erro do Supabase:", error);
+        alert("Erro ao salvar investimento: " + error.message);
+      } else if (data) {
+        dispatch({
+          type: 'ADD_INVESTMENT',
+          payload: data[0]
+        });
+        setNovoInvest({ nome: '', tipo: TIPOS_INVESTIMENTO[0], valorInvestido: '', rentabilidade: '', dataInicio: new Date().toISOString().split('T')[0] });
+      }
     };
 
     const totalInvestido = state.investments.reduce((acc, curr) => acc + curr.valorInvestido, 0);
@@ -687,7 +757,7 @@ export default function FinanceApp() {
           <div className="grid grid-cols-7 gap-2">
             {blanks.map(b => <div key={`blank-${b}`} className="p-4 border border-transparent"></div>)}
             {dias.map(dia => {
-              const transDoDia = filteredTransactions.filter(t => new Date(t.data).getDate() === dia + 1); // +1 fuso hr simplificado
+              const transDoDia = filteredTransactions.filter(t => t.data && parseInt(t.data.split('-')[2], 10) === dia);
               const ent = transDoDia.filter(t => t.tipo === 'Entrada').reduce((a, b) => a + b.valor, 0);
               const sai = transDoDia.filter(t => t.tipo === 'Saída').reduce((a, b) => a + b.valor, 0);
               const saldo = ent - sai;
@@ -752,8 +822,6 @@ export default function FinanceApp() {
 
   return (
     <div className="flex h-screen overflow-hidden font-dm">
-      <style dangerouslySetInnerHTML={{ __html: globalStyles }} />
-      
       {/* Sidebar */}
       <aside className="w-64 bg-[#1C2B2D] text-white flex flex-col">
         <div className="p-6">
@@ -773,6 +841,15 @@ export default function FinanceApp() {
             </button>
           ))}
         </nav>
+        <div className="p-4">
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="w-full flex items-center justify-center space-x-2 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-medium"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Sair</span>
+          </button>
+        </div>
       </aside>
 
       {/* Main Content */}
