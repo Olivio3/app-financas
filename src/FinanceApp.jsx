@@ -19,7 +19,10 @@ import {
   Filter,
   Calendar as CalendarIcon,
   LogOut,
-  Edit2
+  Edit2,
+  Trophy,
+  PlusCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
@@ -120,7 +123,7 @@ const generateMockData = () => {
   };
 };
 
-const initialState = { transactions: [], budgets: [] };
+const initialState = { transactions: [], budgets: [], goals: [] };
 
 // --- Reducer ---
 function financeReducer(state, action) {
@@ -160,6 +163,12 @@ function financeReducer(state, action) {
         return { ...state, budgets: newBudgets };
       }
       return { ...state, budgets: [...state.budgets, action.payload] };
+    case 'ADD_GOAL':
+      return { ...state, goals: [...state.goals, action.payload] };
+    case 'UPDATE_GOAL':
+      return { ...state, goals: state.goals.map(g => g.id === action.payload.id ? action.payload : g) };
+    case 'DELETE_GOAL':
+      return { ...state, goals: state.goals.filter(g => g.id !== action.payload) };
     default:
       return state;
   }
@@ -180,16 +189,18 @@ export default function FinanceApp({ session }) {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [transRes, budRes] = await Promise.all([
+      const [transRes, budRes, goalsRes] = await Promise.all([
         supabase.from('transactions').select('*').eq('user_id', session.user.id).order('data', { ascending: false }),
-        supabase.from('budgets').select('*').eq('user_id', session.user.id)
+        supabase.from('budgets').select('*').eq('user_id', session.user.id),
+        supabase.from('goals').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true })
       ]);
 
       dispatch({
         type: 'SET_DATA',
         payload: {
           transactions: transRes.data || [],
-          budgets: budRes.data || []
+          budgets: budRes.data || [],
+          goals: goalsRes.data || []
         }
       });
     } catch (error) {
@@ -221,9 +232,12 @@ export default function FinanceApp({ session }) {
     frequencia: 'pontual', pagamento: 'a vista', parcelas: 1
   });
   const [novoOrcamento, setNovoOrcamento] = useState({ categoria: CATEGORIAS[0], valor: '' });
+  const [novaMeta, setNovaMeta] = useState({ nome: '', valor_alvo: '' });
+  const [addValorMeta, setAddValorMeta] = useState({ metaId: null, valor: '' });
   const [selectedDay, setSelectedDay] = useState(null);
 
   const [transactionToDelete, setTransactionToDelete] = useState(null);
+  const [goalToDelete, setGoalToDelete] = useState(null);
   const [transactionToEdit, setTransactionToEdit] = useState(null);
   const [originalTxDesc, setOriginalTxDesc] = useState('');
   const [updateFuture, setUpdateFuture] = useState(false);
@@ -304,6 +318,18 @@ export default function FinanceApp({ session }) {
       }
     }
     setTransactionToDelete(null);
+  };
+
+  const confirmDeleteGoal = async () => {
+    if (!goalToDelete) return;
+    const { error } = await supabase.from('goals').delete().eq('id', goalToDelete.id);
+    if (error) {
+      console.error("Erro ao excluir meta:", error);
+      alert("Erro ao excluir meta.");
+    } else {
+      dispatch({ type: 'DELETE_GOAL', payload: goalToDelete.id });
+      setGoalToDelete(null);
+    }
   };
 
   // Cálculos Globais Filtrados
@@ -1042,11 +1068,180 @@ export default function FinanceApp({ session }) {
     );
   };
 
+  const renderMetas = () => {
+    const handleAddGoal = async (e) => {
+      e.preventDefault();
+      if (!novaMeta.nome || !novaMeta.valor_alvo) return;
+      const newGoal = {
+        nome: novaMeta.nome,
+        valor_alvo: parseFloat(novaMeta.valor_alvo),
+        valor_atual: 0,
+        user_id: session.user.id
+      };
+      const { data, error } = await supabase.from('goals').insert([newGoal]).select();
+      if (error) {
+        console.error("Erro ao adicionar meta:", error);
+        alert("Erro ao salvar meta. Você criou a tabela 'goals' no Supabase?");
+      } else if (data) {
+        dispatch({ type: 'ADD_GOAL', payload: data[0] });
+        setNovaMeta({ nome: '', valor_alvo: '' });
+      }
+    };
+
+    const handleAddValue = async (e, goal) => {
+      e.preventDefault();
+      const valorAdicional = parseFloat(addValorMeta.valor);
+      if (!valorAdicional || addValorMeta.metaId !== goal.id) return;
+      const novoValorAtual = goal.valor_atual + valorAdicional;
+      
+      const { data, error } = await supabase.from('goals').update({ valor_atual: novoValorAtual }).eq('id', goal.id).select();
+      if (error) {
+        console.error("Erro ao atualizar meta:", error);
+        alert("Erro ao adicionar valor à meta.");
+      } else if (data) {
+        dispatch({ type: 'UPDATE_GOAL', payload: data[0] });
+        setAddValorMeta({ metaId: null, valor: '' });
+      }
+    };
+
+    const handleCompleteGoal = async (id) => {
+      const { data, error } = await supabase.from('goals').update({ concluida: true }).eq('id', id).select();
+      if (error) {
+        console.error("Erro ao concluir meta:", error);
+        alert("Erro. Você executou o comando SQL no Supabase para adicionar a coluna 'concluida'?");
+      } else {
+        dispatch({ type: 'UPDATE_GOAL', payload: data[0] });
+      }
+    };
+
+    const metasEmAndamento = state.goals.filter(goal => !goal.concluida);
+
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {metasEmAndamento.map(goal => {
+            const percentage = Math.min(100, (goal.valor_atual / goal.valor_alvo) * 100);
+            let color = '#ef4444'; // Red for < 50%
+            if (percentage >= 100) color = '#10b981'; // Green for 100%
+            else if (percentage >= 50) color = '#f59e0b'; // Yellow for 50-99%
+
+            const pieData = [
+              { name: 'Concluído', value: percentage },
+              { name: 'Restante', value: 100 - percentage }
+            ];
+
+            return (
+              <div key={goal.id} className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
+                <h4 className="font-playfair font-bold text-[#1C2B2D] text-lg mb-2">{goal.nome}</h4>
+                <div className="w-32 h-32 mb-2 relative">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} innerRadius={40} outerRadius={55} dataKey="value" stroke="none" startAngle={90} endAngle={-270}>
+                        <Cell fill={color} />
+                        <Cell fill="#f3f4f6" />
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex items-center justify-center font-bold text-lg" style={{ color }}>
+                    {percentage.toFixed(0)}%
+                  </div>
+                </div>
+                <div className="text-sm font-medium text-gray-500 mb-1">{formatCurrency(goal.valor_atual)} / {formatCurrency(goal.valor_alvo)}</div>
+              </div>
+            );
+          })}
+          {metasEmAndamento.length === 0 && (
+            <div className="col-span-full p-8 text-center text-gray-500 bg-[#FDFAF4] rounded-2xl border border-gray-100">
+              Nenhuma meta em andamento no momento.
+            </div>
+          )}
+        </div>
+
+        <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
+          <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Nova Meta</h3>
+          <form onSubmit={handleAddGoal} className="flex gap-4 items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Meta</label>
+              <input type="text" required value={novaMeta.nome} onChange={e => setNovaMeta({ ...novaMeta, nome: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="Ex: Viagem, Carro Novo" />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total Necessário (R$)</label>
+              <input type="number" step="0.01" required value={novaMeta.valor_alvo} onChange={e => setNovaMeta({ ...novaMeta, valor_alvo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
+            </div>
+            <button type="submit" className="bg-[#2C6E7F] text-white p-2 px-6 rounded-lg hover:bg-[#1A4A57] transition-colors h-[42px] flex items-center">
+              <PlusCircle className="w-5 h-5 mr-1" /> Criar Meta
+            </button>
+          </form>
+        </div>
+
+        <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100">
+            <h3 className="font-playfair font-bold text-lg text-[#1C2B2D]">Acompanhamento de Metas</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="p-4 font-medium text-gray-500">Meta</th>
+                  <th className="p-4 font-medium text-gray-500">Valor Atual</th>
+                  <th className="p-4 font-medium text-gray-500">Valor Total (Objetivo)</th>
+                  <th className="p-4 font-medium text-gray-500">Falta</th>
+                  <th className="p-4 font-medium text-gray-500 w-1/3">Adicionar Valor</th>
+                  <th className="p-4 font-medium text-gray-500 text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {state.goals.map(goal => (
+                  <tr key={goal.id} className="hover:bg-[#fcf9f2]">
+                    <td className="p-4 font-medium text-[#1C2B2D]">{goal.nome}</td>
+                    <td className="p-4 text-gray-600">{formatCurrency(goal.valor_atual)}</td>
+                    <td className="p-4 text-gray-600">{formatCurrency(goal.valor_alvo)}</td>
+                    <td className="p-4 text-red-600 font-medium">{formatCurrency(goal.valor_alvo - goal.valor_atual)}</td>
+                    <td className="p-4">
+                      {!goal.concluida ? (
+                        <form onSubmit={(e) => handleAddValue(e, goal)} className="flex items-center space-x-2">
+                          <input
+                            type="number" step="0.01" required placeholder="0.00"
+                            value={addValorMeta.metaId === goal.id ? addValorMeta.valor : ''}
+                            onChange={(e) => setAddValorMeta({ metaId: goal.id, valor: e.target.value })}
+                            className="w-24 rounded-lg border-gray-300 border p-1 text-sm focus:ring-[#2C6E7F]"
+                          />
+                          <button type="submit" className="text-xs bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded-lg transition-colors">
+                            Adicionar
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <CheckCircle2 className="w-3 h-3 mr-1" /> Concluída
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4 flex justify-center space-x-3">
+                      {!goal.concluida && (
+                        <button onClick={() => handleCompleteGoal(goal.id)} title="Marcar como Concluída" className="text-gray-400 hover:text-green-600 transition-colors">
+                          <CheckCircle2 className="w-5 h-5" />
+                        </button>
+                      )}
+                      <button onClick={() => setGoalToDelete(goal)} title="Excluir" className="text-gray-400 hover:text-red-500 transition-colors">
+                        <Trash2 className="w-5 h-5 mx-auto" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'transacoes', label: 'Transações', icon: <ArrowRightLeft className="w-5 h-5" /> },
     { id: 'mensal', label: 'Controle Mensal', icon: <Activity className="w-5 h-5" /> },
     { id: 'orcamento', label: 'Orçamento', icon: <Target className="w-5 h-5" /> },
+    { id: 'metas', label: 'Metas', icon: <Trophy className="w-5 h-5" /> },
     { id: 'calendario', label: 'Calendário', icon: <CalendarDays className="w-5 h-5" /> }
   ];
 
@@ -1138,6 +1333,7 @@ export default function FinanceApp({ session }) {
             {activeTab === 'transacoes' && renderTransacoes()}
             {activeTab === 'mensal' && renderControleMensal()}
             {activeTab === 'orcamento' && renderOrcamento()}
+            {activeTab === 'metas' && renderMetas()}
             {activeTab === 'calendario' && renderCalendario()}
           </div>
         </div>
@@ -1177,6 +1373,28 @@ export default function FinanceApp({ session }) {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {goalToDelete && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-2xl shadow-xl w-96 border border-gray-100 animate-in fade-in zoom-in duration-200">
+              <div className="flex justify-center mb-4 text-red-500">
+                <AlertCircle className="w-12 h-12" />
+              </div>
+              <h3 className="text-xl font-playfair font-bold text-center text-[#1C2B2D] mb-2">Excluir Meta</h3>
+              <p className="text-center text-gray-500 mb-6">
+                Tem certeza que deseja apagar a meta "{goalToDelete.nome}"? Esta ação não pode ser desfeita.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setGoalToDelete(null)} className="flex-1 py-2 rounded-xl text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={confirmDeleteGoal} className="flex-1 py-2 rounded-xl text-white bg-red-500 hover:bg-red-600 font-medium transition-colors">
+                  Excluir
+                </button>
+              </div>
             </div>
           </div>
         )}
