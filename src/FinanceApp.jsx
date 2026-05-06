@@ -38,6 +38,8 @@ const CATEGORY_COLORS = {
   'Educação': '#A0522D',   // Marrom
   'Salário': '#2C6E7F',    // Verde Água/Azul Mar
   'Freelance': '#7FB5C2',  // Azul Claro
+  'Investimentos': '#8B5CF6', // Roxo
+  'Trabalho': '#F59E0B',      // Âmbar
   'Outros': '#B4D2D9'      // Azul Pálido
 };
 
@@ -60,7 +62,7 @@ const formatCompactCurrency = (value) => {
   }).format(value);
 };
 
-const CATEGORIAS = ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Salário', 'Freelance', 'Outros'];
+const CATEGORIAS = ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Salário', 'Freelance', 'Investimentos', 'Trabalho', 'Outros'];
 const TIPOS_INVESTIMENTO = ['Renda Fixa', 'Ações', 'FII', 'Cripto', 'Internacional'];
 
 const TooltipIcon = ({ icon: Icon, text, colorClass, position = "bottom" }) => {
