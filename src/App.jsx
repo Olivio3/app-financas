@@ -5,20 +5,28 @@ import Auth from './Auth';
 
 function App() {
   const [session, setSession] = useState(null);
+  const [isRecovery, setIsRecovery] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true);
+      }
     });
   }, []);
 
   return (
     <div>
-      {!session ? <Auth /> : <FinanceApp session={session} />}
+      {(!session || isRecovery) ? (
+        <Auth isRecovery={isRecovery} onPasswordUpdated={() => setIsRecovery(false)} />
+      ) : (
+        <FinanceApp session={session} />
+      )}
     </div>
   );
 }
