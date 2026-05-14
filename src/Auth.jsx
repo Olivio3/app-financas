@@ -30,12 +30,22 @@ export default function Auth({ isRecovery, onPasswordUpdated }) {
         });
         if (error) throw error;
       } else if (view === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
         });
-        if (error) throw error;
-        setMessage('Cadastro realizado! Verifique seu email para confirmar a conta.');
+        if (error) {
+          if (error.message.includes('confirmation email')) {
+            throw new Error('Erro ao enviar e-mail de confirmação. Desabilite "Confirm email" no dashboard do Supabase para permitir o cadastro direto.');
+          }
+          throw error;
+        }
+        
+        if (data?.session) {
+          setMessage('Cadastro realizado com sucesso! Entrando...');
+        } else {
+          setMessage('Cadastro realizado! Verifique seu email para confirmar a conta.');
+        }
       } else if (view === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin,
