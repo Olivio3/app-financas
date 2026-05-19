@@ -149,7 +149,7 @@ function financeReducer(state, action) {
         ...state,
         transactions: state.transactions.map(t => {
           if (t.frequencia === 'recorrente' && t.descricao === action.payload.originalDescricao && t.data >= action.payload.data) {
-            return { ...t, descricao: action.payload.newDescricao, valor: action.payload.newValor, categoria: action.payload.newCategoria, tipo: action.payload.newTipo };
+            return { ...t, descricao: action.payload.newDescricao, valor: action.payload.newValor, categoria: action.payload.newCategoria, tipo: action.payload.newTipo, metodo_pagamento: action.payload.newMetodoPagamento };
           }
           return t;
         })
@@ -229,7 +229,7 @@ export default function FinanceApp({ session }) {
   const [novaTransacao, setNovaTransacao] = useState({
     descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação',
     data: new Date().toISOString().split('T')[0],
-    frequencia: 'pontual', pagamento: 'a vista', parcelas: 1
+    frequencia: 'pontual', pagamento: 'a vista', parcelas: 1, metodo_pagamento: 'Pix'
   });
   const [novoOrcamento, setNovoOrcamento] = useState({ categoria: CATEGORIAS[0], valor: '' });
   const [novaMeta, setNovaMeta] = useState({ nome: '', valor_alvo: '' });
@@ -251,7 +251,8 @@ export default function FinanceApp({ session }) {
         descricao: transactionToEdit.descricao,
         valor: parseFloat(transactionToEdit.valor),
         tipo: transactionToEdit.tipo,
-        categoria: transactionToEdit.categoria
+        categoria: transactionToEdit.categoria,
+        metodo_pagamento: transactionToEdit.metodo_pagamento
       }).eq('frequencia', 'recorrente').eq('descricao', originalTxDesc).gte('data', transactionToEdit.data);
 
       if (error) {
@@ -265,7 +266,8 @@ export default function FinanceApp({ session }) {
             newDescricao: transactionToEdit.descricao,
             newValor: parseFloat(transactionToEdit.valor),
             newCategoria: transactionToEdit.categoria,
-            newTipo: transactionToEdit.tipo
+            newTipo: transactionToEdit.tipo,
+            newMetodoPagamento: transactionToEdit.metodo_pagamento
           }
         });
         setTransactionToEdit(null);
@@ -276,7 +278,8 @@ export default function FinanceApp({ session }) {
         valor: parseFloat(transactionToEdit.valor),
         data: transactionToEdit.data,
         tipo: transactionToEdit.tipo,
-        categoria: transactionToEdit.categoria
+        categoria: transactionToEdit.categoria,
+        metodo_pagamento: transactionToEdit.metodo_pagamento
       }).eq('id', transactionToEdit.id);
 
       if (error) {
@@ -594,6 +597,7 @@ export default function FinanceApp({ session }) {
           data: dataStr,
           frequencia: novaTransacao.frequencia,
           forma_pagamento: novaTransacao.pagamento,
+          metodo_pagamento: novaTransacao.metodo_pagamento,
           total_parcelas: isParcelado ? numParcelas : 1,
           parcela_atual: isParcelado ? i + 1 : 1,
           user_id: session.user.id
@@ -609,7 +613,7 @@ export default function FinanceApp({ session }) {
         data.forEach(t => {
           dispatch({ type: 'ADD_TRANSACTION', payload: t });
         });
-        setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: getDefaultDateForSelectedMonth(), frequencia: 'pontual', pagamento: 'a vista', parcelas: 1 });
+        setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: getDefaultDateForSelectedMonth(), frequencia: 'pontual', pagamento: 'a vista', parcelas: 1, metodo_pagamento: 'Pix' });
       }
     };
 
@@ -633,7 +637,7 @@ export default function FinanceApp({ session }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4 items-end">
+            <div className="grid grid-cols-2 md:grid-cols-7 gap-3 md:gap-4 items-end">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
                 <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({ ...novaTransacao, tipo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
@@ -652,6 +656,15 @@ export default function FinanceApp({ session }) {
                 <select disabled={novaTransacao.pagamento === 'parcelado'} value={novaTransacao.frequencia} onChange={e => setNovaTransacao({ ...novaTransacao, frequencia: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] disabled:bg-gray-100">
                   <option value="pontual">Pontual</option>
                   <option value="recorrente">Mensal Fixa</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Método</label>
+                <select value={novaTransacao.metodo_pagamento} onChange={e => setNovaTransacao({ ...novaTransacao, metodo_pagamento: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                  <option value="Pix">Pix</option>
+                  <option value="Débito">Débito</option>
+                  <option value="Crédito">Crédito</option>
+                  <option value="Boleto">Boleto</option>
                 </select>
               </div>
               <div>
@@ -684,6 +697,7 @@ export default function FinanceApp({ session }) {
                   <th className="p-4 font-medium text-gray-500">Data</th>
                   <th className="p-4 font-medium text-gray-500">Descrição</th>
                   <th className="p-4 font-medium text-gray-500">Categoria</th>
+                  <th className="p-4 font-medium text-gray-500">Método</th>
                   <th className="p-4 font-medium text-gray-500">Tipo</th>
                   <th className="p-4 font-medium text-gray-500">Valor</th>
                   <th className="p-4 font-medium text-gray-500">Ações</th>
@@ -700,6 +714,7 @@ export default function FinanceApp({ session }) {
                         {t.categoria}
                       </div>
                     </td>
+                    <td className="p-4 text-gray-600">{t.metodo_pagamento || '-'}</td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.tipo === 'Entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {t.tipo}
@@ -739,7 +754,7 @@ export default function FinanceApp({ session }) {
                   <h4 className="font-bold text-[#1C2B2D] truncate">{t.descricao}</h4>
                   <div className="flex items-center text-xs text-gray-500 mt-1">
                     <span className="w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: getCategoryColor(t.categoria) }}></span>
-                    {t.categoria}
+                    {t.categoria} {t.metodo_pagamento ? ` • ${t.metodo_pagamento}` : ''}
                   </div>
                 </div>
                 <div className="text-right">
@@ -1435,6 +1450,16 @@ export default function FinanceApp({ session }) {
                       {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Método</label>
+                  <select value={transactionToEdit.metodo_pagamento || 'Pix'} onChange={e => setTransactionToEdit({ ...transactionToEdit, metodo_pagamento: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
+                    <option value="Pix">Pix</option>
+                    <option value="Débito">Débito</option>
+                    <option value="Crédito">Crédito</option>
+                    <option value="Boleto">Boleto</option>
+                  </select>
                 </div>
 
                 {transactionToEdit.frequencia === 'recorrente' && (
