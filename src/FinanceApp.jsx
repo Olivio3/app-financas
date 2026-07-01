@@ -65,6 +65,30 @@ const formatCompactCurrency = (value) => {
   }).format(value);
 };
 
+const formatInputCurrency = (value) => {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'number') {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  }
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return '';
+  const cents = parseInt(digits, 10);
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(cents / 100);
+};
+
+const parseCurrencyToFloat = (value) => {
+  if (value === undefined || value === null || value === '') return 0;
+  if (typeof value === 'number') return value;
+  const cleaned = value.replace(/\./g, '').replace(',', '.');
+  return parseFloat(cleaned) || 0;
+};
+
 const CATEGORIAS = ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Salário', 'Freelance', 'Investimentos', 'Trabalho', 'Outros'];
 const TIPOS_INVESTIMENTO = ['Renda Fixa', 'Ações', 'FII', 'Cripto', 'Internacional'];
 
@@ -249,7 +273,7 @@ export default function FinanceApp({ session }) {
     if (transactionToEdit.frequencia === 'recorrente' && updateFuture) {
       const { error } = await supabase.from('transactions').update({
         descricao: transactionToEdit.descricao,
-        valor: parseFloat(transactionToEdit.valor),
+        valor: parseCurrencyToFloat(transactionToEdit.valor),
         tipo: transactionToEdit.tipo,
         categoria: transactionToEdit.categoria,
         metodo_pagamento: transactionToEdit.metodo_pagamento
@@ -264,7 +288,7 @@ export default function FinanceApp({ session }) {
             originalDescricao: originalTxDesc,
             data: transactionToEdit.data,
             newDescricao: transactionToEdit.descricao,
-            newValor: parseFloat(transactionToEdit.valor),
+            newValor: parseCurrencyToFloat(transactionToEdit.valor),
             newCategoria: transactionToEdit.categoria,
             newTipo: transactionToEdit.tipo,
             newMetodoPagamento: transactionToEdit.metodo_pagamento
@@ -275,7 +299,7 @@ export default function FinanceApp({ session }) {
     } else {
       const { error } = await supabase.from('transactions').update({
         descricao: transactionToEdit.descricao,
-        valor: parseFloat(transactionToEdit.valor),
+        valor: parseCurrencyToFloat(transactionToEdit.valor),
         data: transactionToEdit.data,
         tipo: transactionToEdit.tipo,
         categoria: transactionToEdit.categoria,
@@ -286,7 +310,7 @@ export default function FinanceApp({ session }) {
         console.error("Erro ao atualizar:", error);
         alert("Erro ao editar: " + error.message);
       } else {
-        const updatedTx = { ...transactionToEdit, valor: parseFloat(transactionToEdit.valor) };
+        const updatedTx = { ...transactionToEdit, valor: parseCurrencyToFloat(transactionToEdit.valor) };
         dispatch({ type: 'UPDATE_TRANSACTION', payload: updatedTx });
         setTransactionToEdit(null);
       }
@@ -558,7 +582,7 @@ export default function FinanceApp({ session }) {
       if (!novaTransacao.descricao || !novaTransacao.valor) return;
 
       let numParcelas = 1;
-      const valorTotal = parseFloat(novaTransacao.valor);
+      const valorTotal = parseCurrencyToFloat(novaTransacao.valor);
       let valorParcela = valorTotal;
       const isParcelado = novaTransacao.pagamento === 'parcelado';
 
@@ -633,7 +657,7 @@ export default function FinanceApp({ session }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total (R$)</label>
-                <input type="number" step="0.01" required value={novaTransacao.valor} onChange={e => setNovaTransacao({ ...novaTransacao, valor: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
+                <input type="text" required value={novaTransacao.valor} onChange={e => setNovaTransacao({ ...novaTransacao, valor: formatInputCurrency(e.target.value) })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0,00" />
               </div>
             </div>
 
@@ -1429,7 +1453,7 @@ export default function FinanceApp({ session }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Valor</label>
-                    <input type="number" step="0.01" required value={transactionToEdit.valor} onChange={e => setTransactionToEdit({ ...transactionToEdit, valor: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none" />
+                    <input type="text" required value={formatInputCurrency(transactionToEdit.valor)} onChange={e => setTransactionToEdit({ ...transactionToEdit, valor: formatInputCurrency(e.target.value) })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
