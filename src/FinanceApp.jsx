@@ -22,7 +22,8 @@ import {
   Edit2,
   Trophy,
   PlusCircle,
-  CheckCircle2
+  CheckCircle2,
+  CheckSquare
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
@@ -357,6 +358,22 @@ export default function FinanceApp({ session }) {
         dispatch({ type: 'UPDATE_TRANSACTION', payload: updatedTx });
         setTransactionToEdit(null);
       }
+    }
+  };
+
+  const handleTogglePago = async (tx) => {
+    const novoStatus = !tx.pago;
+    const { data, error } = await supabase
+      .from('transactions')
+      .update({ pago: novoStatus })
+      .eq('id', tx.id)
+      .select();
+
+    if (error) {
+      console.error("Erro ao atualizar status de pagamento:", error);
+      alert("Erro ao marcar como pago. Você já executou o comando SQL no Supabase para adicionar a coluna 'pago'?\n\nExecute no SQL Editor do Supabase:\nALTER TABLE transactions ADD COLUMN pago BOOLEAN DEFAULT false;");
+    } else if (data && data[0]) {
+      dispatch({ type: 'UPDATE_TRANSACTION', payload: data[0] });
     }
   };
 
@@ -1150,6 +1167,115 @@ export default function FinanceApp({ session }) {
     );
   };
 
+  const renderChecklist = () => {
+    const despesasRecorrentes = state.transactions.filter(t => {
+      if (!t.data || t.tipo !== 'Saída' || t.frequencia !== 'recorrente') return false;
+      const [ano, mes] = t.data.split('-');
+      return parseInt(mes, 10) === selectedMonth && parseInt(ano, 10) === selectedYear;
+    });
+
+    const totalDespesas = despesasRecorrentes.length;
+    const pagas = despesasRecorrentes.filter(t => t.pago).length;
+    const percentual = totalDespesas > 0 ? (pagas / totalDespesas) * 100 : 0;
+
+    const valorTotalRecorrente = despesasRecorrentes.reduce((acc, curr) => acc + curr.valor, 0);
+    const valorPagoRecorrente = despesasRecorrentes.filter(t => t.pago).reduce((acc, curr) => acc + curr.valor, 0);
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-200">
+        {/* Progresso do Mês */}
+        <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div>
+              <h3 className="font-playfair font-bold text-xl text-[#1C2B2D]">Checklist de Despesas Fixas</h3>
+              <p className="text-sm text-gray-500 mt-1">Acompanhe o pagamento das suas contas mensais recorrentes.</p>
+            </div>
+            <div className="text-right">
+              <span className="text-sm font-semibold text-gray-500 uppercase">Progresso de Contas</span>
+              <div className="text-2xl font-playfair font-bold text-[#2C6E7F]">
+                {pagas} de {totalDespesas} pagas ({percentual.toFixed(0)}%)
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
+            <div
+              className="h-3 rounded-full bg-[#2C6E7F] transition-all duration-500"
+              style={{ width: `${percentual}%` }}
+            ></div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>Total Agendado:</span>
+              <span className="font-semibold text-gray-800">{formatCurrency(valorTotalRecorrente)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>Total Pago:</span>
+              <span className="font-semibold text-green-700">{formatCurrency(valorPagoRecorrente)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Lista de Contas */}
+        <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+            <h4 className="font-playfair font-bold text-lg text-[#1C2B2D]">Contas do Mês</h4>
+            <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">
+              Apenas Contas Mensais Fixas
+            </span>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {despesasRecorrentes.map(t => {
+              const diaVencimento = t.data.split('-')[2];
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => handleTogglePago(t)}
+                  className={`p-4 px-6 flex items-center justify-between hover:bg-[#fcf9f2] transition-colors cursor-pointer select-none ${t.pago ? 'opacity-70' : ''}`}
+                >
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="checkbox"
+                      checked={!!t.pago}
+                      readOnly
+                      className="w-5 h-5 rounded text-[#2C6E7F] focus:ring-[#2C6E7F] cursor-pointer"
+                    />
+                    <div>
+                      <p className={`font-medium ${t.pago ? 'line-through text-gray-400' : 'text-[#1C2B2D]'}`}>
+                        {t.descricao}
+                      </p>
+                      <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-1">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(t.categoria) }}></span>
+                        {t.categoria} • Vence dia {diaVencimento}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-4">
+                    <div className={`font-bold ${t.pago ? 'text-gray-400 line-through' : 'text-red-600'}`}>
+                      {formatCurrency(t.valor)}
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${t.pago ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {t.pago ? 'Pago' : 'Pendente'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {despesasRecorrentes.length === 0 && (
+              <div className="p-8 text-center text-gray-500">
+                Nenhuma despesa fixa mensal cadastrada para este mês.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderMetas = () => {
     const handleAddGoal = async (e) => {
       e.preventDefault();
@@ -1321,6 +1447,7 @@ export default function FinanceApp({ session }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'transacoes', label: 'Transações', icon: <ArrowRightLeft className="w-5 h-5" /> },
+    { id: 'checklist', label: 'Checklist', icon: <CheckSquare className="w-5 h-5" /> },
     { id: 'mensal', label: 'Controle Mensal', icon: <Activity className="w-5 h-5" /> },
     { id: 'orcamento', label: 'Orçamento', icon: <Target className="w-5 h-5" /> },
     { id: 'metas', label: 'Metas', icon: <Trophy className="w-5 h-5" /> },
@@ -1413,6 +1540,7 @@ export default function FinanceApp({ session }) {
           <div className="max-w-6xl mx-auto pb-12">
             {activeTab === 'dashboard' && renderDashboard()}
             {activeTab === 'transacoes' && renderTransacoes()}
+            {activeTab === 'checklist' && renderChecklist()}
             {activeTab === 'mensal' && renderControleMensal()}
             {activeTab === 'orcamento' && renderOrcamento()}
             {activeTab === 'metas' && renderMetas()}
