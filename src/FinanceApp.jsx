@@ -348,7 +348,7 @@ export default function FinanceApp({ session }) {
         tipo: transactionToEdit.tipo,
         categoria: transactionToEdit.categoria,
         metodo_pagamento: transactionToEdit.metodo_pagamento
-      }).eq('id', transactionToEdit.id);
+      }).eq('id', transactionToEdit.id).eq('user_id', session.user.id);
 
       if (error) {
         console.error("Erro ao atualizar:", error);
@@ -367,6 +367,7 @@ export default function FinanceApp({ session }) {
       .from('transactions')
       .update({ pago: novoStatus })
       .eq('id', tx.id)
+      .eq('user_id', session.user.id)
       .select();
 
     if (error) {
@@ -383,6 +384,7 @@ export default function FinanceApp({ session }) {
     if (future) {
       const { error } = await supabase.from('transactions')
         .delete()
+        .eq('user_id', session.user.id)
         .eq('frequencia', 'recorrente')
         .eq('descricao', transactionToDelete.descricao)
         .gte('data', transactionToDelete.data);
@@ -395,7 +397,7 @@ export default function FinanceApp({ session }) {
         setTransactionToDelete(null);
       }
     } else {
-      const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id);
+      const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id).eq('user_id', session.user.id);
       if (error) {
         console.error("Erro ao deletar:", error);
         alert("Erro ao apagar: " + error.message);
@@ -409,7 +411,7 @@ export default function FinanceApp({ session }) {
 
   const confirmDeleteGoal = async () => {
     if (!goalToDelete) return;
-    const { error } = await supabase.from('goals').delete().eq('id', goalToDelete.id);
+    const { error } = await supabase.from('goals').delete().eq('id', goalToDelete.id).eq('user_id', session.user.id);
     if (error) {
       console.error("Erro ao excluir meta:", error);
       alert("Erro ao excluir meta.");
@@ -1001,7 +1003,7 @@ export default function FinanceApp({ session }) {
 
       let result;
       if (existing) {
-        result = await supabase.from('budgets').update({ valor: newBudget.valor }).eq('id', existing.id).select();
+        result = await supabase.from('budgets').update({ valor: newBudget.valor }).eq('id', existing.id).eq('user_id', session.user.id).select();
       } else {
         result = await supabase.from('budgets').insert([newBudget]).select();
       }
@@ -1302,7 +1304,7 @@ export default function FinanceApp({ session }) {
       if (!valorAdicional || addValorMeta.metaId !== goal.id) return;
       const novoValorAtual = goal.valor_atual + valorAdicional;
       
-      const { data, error } = await supabase.from('goals').update({ valor_atual: novoValorAtual }).eq('id', goal.id).select();
+      const { data, error } = await supabase.from('goals').update({ valor_atual: novoValorAtual }).eq('id', goal.id).eq('user_id', session.user.id).select();
       if (error) {
         console.error("Erro ao atualizar meta:", error);
         alert("Erro ao adicionar valor à meta.");
@@ -1313,7 +1315,7 @@ export default function FinanceApp({ session }) {
     };
 
     const handleCompleteGoal = async (id) => {
-      const { data, error } = await supabase.from('goals').update({ concluida: true }).eq('id', id).select();
+      const { data, error } = await supabase.from('goals').update({ concluida: true }).eq('id', id).eq('user_id', session.user.id).select();
       if (error) {
         console.error("Erro ao concluir meta:", error);
         alert("Erro. Você executou o comando SQL no Supabase para adicionar a coluna 'concluida'?");
