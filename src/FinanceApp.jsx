@@ -92,6 +92,11 @@ const parseCurrencyToFloat = (value) => {
 const CATEGORIAS = ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Salário', 'Freelance', 'Investimentos', 'Trabalho', 'Outros'];
 const TIPOS_INVESTIMENTO = ['Renda Fixa', 'Ações', 'FII', 'Cripto', 'Internacional'];
 
+const getValidDayForMonth = (year, month, targetDay) => {
+  const lastDayOfMonth = new Date(year, month, 0).getDate();
+  return Math.min(targetDay, lastDayOfMonth);
+};
+
 const TooltipIcon = ({ icon: Icon, text, colorClass, position = "bottom" }) => {
   const [show, setShow] = React.useState(false);
   const isTop = position === "top";
@@ -169,15 +174,18 @@ function financeReducer(state, action) {
         transactions: state.transactions.filter(t => !(t.frequencia === 'recorrente' && t.descricao === action.payload.descricao && t.data >= action.payload.data))
       };
     case 'UPDATE_FUTURE_RECURRING':
-      return {
-        ...state,
-        transactions: state.transactions.map(t => {
-          if (t.frequencia === 'recorrente' && t.descricao === action.payload.originalDescricao && t.data >= action.payload.data) {
-            return { ...t, descricao: action.payload.newDescricao, valor: action.payload.newValor, categoria: action.payload.newCategoria, tipo: action.payload.newTipo, metodo_pagamento: action.payload.newMetodoPagamento };
-          }
-          return t;
-        })
-      };
+      {
+        const updatedIds = new Set(action.payload.map(t => t.id));
+        return {
+          ...state,
+          transactions: state.transactions.map(t => {
+            if (updatedIds.has(t.id)) {
+              return action.payload.find(ut => ut.id === t.id);
+            }
+            return t;
+          }).sort((a, b) => b.data.localeCompare(a.data))
+        };
+      }
     case 'ADD_BUDGET':
       // Atualiza se já existir, senão adiciona
       const existingBudgetIdx = state.budgets.findIndex(b => b.categoria === action.payload.categoria && b.mes === action.payload.mes && b.ano === action.payload.ano);
@@ -264,6 +272,7 @@ export default function FinanceApp({ session }) {
   const [goalToDelete, setGoalToDelete] = useState(null);
   const [transactionToEdit, setTransactionToEdit] = useState(null);
   const [originalTxDesc, setOriginalTxDesc] = useState('');
+  const [originalTxDate, setOriginalTxDate] = useState('');
   const [updateFuture, setUpdateFuture] = useState(false);
 
   const handleEditSubmit = async (e) => {
@@ -271,28 +280,62 @@ export default function FinanceApp({ session }) {
     if (!transactionToEdit) return;
 
     if (transactionToEdit.frequencia === 'recorrente' && updateFuture) {
-      const { error } = await supabase.from('transactions').update({
-        descricao: transactionToEdit.descricao,
-        valor: parseCurrencyToFloat(transactionToEdit.valor),
-        tipo: transactionToEdit.tipo,
-        categoria: transactionToEdit.categoria,
-        metodo_pagamento: transactionToEdit.metodo_pagamento
-      }).eq('frequencia', 'recorrente').eq('descricao', originalTxDesc).gte('data', transactionToEdit.data);
+      // Buscar todos os lançamentos futuros desta recorrência para atualizar a data no mesmo dia do mês
+      const { data: recurringTxs, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .eq('frequencia', 'recorrente')
+        .eq('descricao', originalTxDesc)
+        .gte('data', originalTxDate);
 
-      if (error) {
-        console.error("Erro ao atualizar lote:", error);
-        alert("Erro ao editar em lote: " + error.message);
+      if (fetchError) {
+        console.error("Erro ao buscar recorrências:", fetchError);
+        alert("Erro ao buscar recorrências: " + fetchError.message);
+        return;
+      }
+
+      const targetDay = parseInt(transactionToEdit.data.split('-')[2], 10);
+      const updatedTxs = recurringTxs.map(tx => {
+        if (tx.id === transactionToEdit.id) {
+          return {
+            ...tx,
+            descricao: transactionToEdit.descricao,
+            valor: parseCurrencyToFloat(transactionToEdit.valor),
+            tipo: transactionToEdit.tipo,
+            categoria: transactionToEdit.categoria,
+            metodo_pagamento: transactionToEdit.metodo_pagamento,
+            data: transactionToEdit.data
+          };
+        } else {
+          const [yStr, mStr, dStr] = tx.data.split('-');
+          const y = parseInt(yStr, 10);
+          const m = parseInt(mStr, 10);
+          const validDay = getValidDayForMonth(y, m, targetDay);
+          const newData = `${y}-${m.toString().padStart(2, '0')}-${validDay.toString().padStart(2, '0')}`;
+          return {
+            ...tx,
+            descricao: transactionToEdit.descricao,
+            valor: parseCurrencyToFloat(transactionToEdit.valor),
+            tipo: transactionToEdit.tipo,
+            categoria: transactionToEdit.categoria,
+            metodo_pagamento: transactionToEdit.metodo_pagamento,
+            data: newData
+          };
+        }
+      });
+
+      const { error: upsertError } = await supabase
+        .from('transactions')
+        .upsert(updatedTxs);
+
+      if (upsertError) {
+        console.error("Erro ao atualizar lote:", upsertError);
+        alert("Erro ao editar em lote: " + upsertError.message);
       } else {
         dispatch({
-          type: 'UPDATE_FUTURE_RECURRING', payload: {
-            originalDescricao: originalTxDesc,
-            data: transactionToEdit.data,
-            newDescricao: transactionToEdit.descricao,
-            newValor: parseCurrencyToFloat(transactionToEdit.valor),
-            newCategoria: transactionToEdit.categoria,
-            newTipo: transactionToEdit.tipo,
-            newMetodoPagamento: transactionToEdit.metodo_pagamento
-          }
+          type: 'UPDATE_FUTURE_RECURRING',
+          payload: updatedTxs
         });
         setTransactionToEdit(null);
       }
@@ -561,7 +604,7 @@ export default function FinanceApp({ session }) {
                   <div className={`font-medium ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-600'}`}>
                     {t.tipo === 'Entrada' ? '+' : '-'}{formatCurrency(t.valor)}
                   </div>
-                  <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500 transition-colors">
+                  <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setOriginalTxDate(t.data); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500 transition-colors">
                     <Edit2 className="w-5 h-5" />
                   </button>
                   <button onClick={() => setTransactionToDelete(t)} className="text-gray-400 hover:text-red-500 transition-colors">
@@ -748,7 +791,7 @@ export default function FinanceApp({ session }) {
                       {formatCurrency(t.valor)}
                     </td>
                     <td className="p-4 flex space-x-2">
-                      <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500 transition-colors">
+                      <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setOriginalTxDate(t.data); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500 transition-colors">
                         <Edit2 className="w-5 h-5" />
                       </button>
                       <button onClick={() => setTransactionToDelete(t)} className="text-gray-400 hover:text-red-500 transition-colors">
@@ -786,7 +829,7 @@ export default function FinanceApp({ session }) {
                     {formatCurrency(t.valor)}
                   </div>
                   <div className="flex justify-end space-x-3 mt-2">
-                    <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500">
+                    <button onClick={() => { setTransactionToEdit(t); setOriginalTxDesc(t.descricao); setOriginalTxDate(t.data); setUpdateFuture(false); }} className="text-gray-400 hover:text-blue-500">
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button onClick={() => setTransactionToDelete(t)} className="text-gray-400 hover:text-red-500">
@@ -1457,7 +1500,7 @@ export default function FinanceApp({ session }) {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                    <input type="date" disabled={transactionToEdit.frequencia === 'recorrente' && updateFuture} required value={transactionToEdit.data} onChange={e => setTransactionToEdit({ ...transactionToEdit, data: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none disabled:opacity-50" />
+                    <input type="date" required value={transactionToEdit.data} onChange={e => setTransactionToEdit({ ...transactionToEdit, data: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -1496,7 +1539,7 @@ export default function FinanceApp({ session }) {
                       className="mt-1 text-blue-600 rounded focus:ring-blue-500"
                     />
                     <label htmlFor="updateFuture" className="text-sm font-medium cursor-pointer">
-                      Aplicar as alterações desta transação (Valor, Categoria, Nome) para todas as futuras cobranças desta recorrência.
+                      Aplicar as alterações desta transação (Valor, Categoria, Nome, Data) para todas as futuras cobranças desta recorrência.
                     </label>
                   </div>
                 )}
