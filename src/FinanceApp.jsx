@@ -23,7 +23,8 @@ import {
   Trophy,
   PlusCircle,
   CheckCircle2,
-  CheckSquare
+  CheckSquare,
+  BookOpen
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
@@ -1445,6 +1446,84 @@ export default function FinanceApp({ session }) {
       </div>
     );
   };
+  const renderManual = () => {
+    return (
+      <div className="bg-[#FDFAF4] p-8 rounded-2xl shadow-sm border border-gray-100 max-w-4xl mx-auto space-y-6 text-[#1C2B2D] animate-in fade-in duration-200">
+        <h3 className="font-playfair font-bold text-3xl mb-2 text-[#1C2B2D]">Manual de Uso — No Azul</h3>
+        <p className="text-gray-600 border-b border-gray-100 pb-4">
+          O <strong>No Azul</strong> é um sistema completo e intuitivo para controle de finanças pessoais, projetado para ajudar você a gerenciar suas receitas, despesas, orçamentos, metas financeiras e compromissos recorrentes de forma organizada e segura.
+        </p>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
+              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">📊</span> Dashboard
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Sua visão geral sobre a saúde financeira do mês selecionado. Ele exibe o saldo do mês, saldo acumulado total histórico, entradas, saídas, gráficos do fluxo de caixa dos últimos 6 meses, gráfico de pizza com as despesas por categoria, previsão de custo fixo anual e dívidas futuras em parcelamento.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
+              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">💸</span> Transações
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Permite cadastrar e gerenciar toda a movimentação financeira. Você pode lançar despesas/receitas pontuais ou <strong>Mensais Fixas</strong> (que são replicadas por 12 meses). Também suporta parcelamento, dividindo o valor total nas parcelas correspondentes.
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Ao editar uma transação recorrente, você pode propagar as alterações (incluindo o dia de vencimento da data) para todos os meses futuros de forma automática.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
+              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">☑️</span> Checklist (Despesas Fixas)
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Um checklist automático contendo todas as suas despesas Mensais Fixas. Você pode clicar no item para marcar se a conta já foi paga ou se continua pendente, acompanhando o progresso e o somatório pago em tempo real.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
+              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">📈</span> Controle Mensal
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Exibe um gráfico de linha interativo com a evolução diária do saldo e uma listagem proporcional de saídas por categoria em porcentagem e valor absoluto.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
+              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">🎯</span> Orçamento
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Defina limites de gastos mensais por categoria. O sistema exibe um alerta visual: verde para consumo controlado, amarelo se passar de 80% do limite, e vermelho com aviso de "Estourou" caso o limite seja ultrapassado.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
+              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">🏆</span> Metas
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Planeje economizar dinheiro com objetivos específicos. Acompanhe a evolução percentual em gráficos circulares interativos, adicione fundos conforme economiza e marque-as como concluídas ao finalizar.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
+              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">📅</span> Calendário
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Exibição visual dos seus lançamentos dispostos nos dias do mês com cores indicativas (saldo diário positivo ou negativo). Clique em qualquer dia ativo para visualizar em detalhes todas as transações ocorridas.
+            </p>
+          </section>
+        </div>
+      </div>
+    );
+  };
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -1453,7 +1532,8 @@ export default function FinanceApp({ session }) {
     { id: 'mensal', label: 'Controle Mensal', icon: <Activity className="w-5 h-5" /> },
     { id: 'orcamento', label: 'Orçamento', icon: <Target className="w-5 h-5" /> },
     { id: 'metas', label: 'Metas', icon: <Trophy className="w-5 h-5" /> },
-    { id: 'calendario', label: 'Calendário', icon: <CalendarDays className="w-5 h-5" /> }
+    { id: 'calendario', label: 'Calendário', icon: <CalendarDays className="w-5 h-5" /> },
+    { id: 'manual', label: 'Manual', icon: <BookOpen className="w-5 h-5" /> }
   ];
 
   const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -1547,6 +1627,7 @@ export default function FinanceApp({ session }) {
             {activeTab === 'orcamento' && renderOrcamento()}
             {activeTab === 'metas' && renderMetas()}
             {activeTab === 'calendario' && renderCalendario()}
+            {activeTab === 'manual' && renderManual()}
           </div>
         </div>
 
