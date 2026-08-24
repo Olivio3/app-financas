@@ -255,7 +255,7 @@ export default function FinanceApp({ session }) {
   React.useEffect(() => {
     if (session?.user) {
       const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding_noazul');
-      const hasSeenUpdate = localStorage.getItem('hasSeenUpdate_v1');
+      const hasSeenUpdate = localStorage.getItem('hasSeenUpdate_v2');
       if (!hasSeenOnboarding) {
         setShowOnboarding(true);
       } else if (!hasSeenUpdate) {
@@ -2058,7 +2058,7 @@ export default function FinanceApp({ session }) {
                       localStorage.setItem('hasSeenOnboarding_noazul', 'true');
                       setShowOnboarding(false);
                       // Se fechou onboarding, garante que o update não aparece por cima logo depois
-                      localStorage.setItem('hasSeenUpdate_v1', 'true');
+                      localStorage.setItem('hasSeenUpdate_v2', 'true');
                     }}
                     className="flex-1 bg-[#10B981] text-white py-3 rounded-xl font-medium hover:bg-green-600 transition-colors shadow-lg shadow-green-500/20"
                   >
@@ -2071,7 +2071,7 @@ export default function FinanceApp({ session }) {
                     onClick={() => {
                       localStorage.setItem('hasSeenOnboarding_noazul', 'true');
                       setShowOnboarding(false);
-                      localStorage.setItem('hasSeenUpdate_v1', 'true');
+                      localStorage.setItem('hasSeenUpdate_v2', 'true');
                     }}
                     className="px-6 text-gray-400 font-medium hover:text-gray-600 transition-colors"
                   >
@@ -2146,7 +2146,7 @@ export default function FinanceApp({ session }) {
 
               <button
                 onClick={() => {
-                  localStorage.setItem('hasSeenUpdate_v1', 'true');
+                  localStorage.setItem('hasSeenUpdate_v2', 'true');
                   setShowUpdateModal(false);
                 }}
                 className="w-full bg-[#011640] text-white py-3 rounded-xl font-medium hover:bg-[#01256B] transition-colors"
