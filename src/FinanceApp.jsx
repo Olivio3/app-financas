@@ -24,9 +24,42 @@ import {
   PlusCircle,
   CheckCircle2,
   CheckSquare,
-  BookOpen
+  BookOpen,
+  Sparkles,
+  Receipt,
+  X,
+  CheckCircle
 } from 'lucide-react';
+
+const ONBOARDING_STEPS = [
+  {
+    title: "Bem-vindo ao No Azul! 👋",
+    description: "Estamos muito felizes em ter você por aqui. O No Azul foi criado para te ajudar a ter controle total sobre o seu dinheiro, de forma simples e visual. Vamos fazer um tour\u00A0rápido?",
+    icon: <Sparkles className="w-10 h-10 text-[#011640]" />
+  },
+  {
+    title: "Análise",
+    description: "Sua visão detalhada! Descubra de onde vem o dinheiro, para onde ele vai, identifique os maiores gastos e projete seu saldo final do\u00A0mês.",
+    icon: <PieChartIcon className="w-10 h-10 text-[#011640]" />
+  },
+  {
+    title: "Transações Inteligentes",
+    description: "Cadastre despesas e receitas. Você pode adicionar lançamentos pontuais, parcelados ou criar Mensais Fixas (que se repetem automaticamente todos os\u00A0meses!).",
+    icon: <Receipt className="w-10 h-10 text-[#011640]" />
+  },
+  {
+    title: "Orçamentos e Metas",
+    description: "Defina limites de gastos por categoria para não estourar o orçamento e crie metas para economizar dinheiro para seus grandes\u00A0sonhos.",
+    icon: <Target className="w-10 h-10 text-[#011640]" />
+  },
+  {
+    title: "Tudo Pronto!",
+    description: "Você já está pronto para organizar sua vida financeira e ficar sempre No Azul. Se tiver dúvidas depois, consulte o Manual no menu\u00A0lateral.",
+    icon: <CheckCircle className="w-10 h-10 text-[#10B981]" />
+  }
+];
 import { supabase } from './supabaseClient';
+import { toast, Toaster } from 'react-hot-toast';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -36,12 +69,12 @@ import {
 // --- Utilitários e Constantes ---
 const CATEGORY_COLORS = {
   'Alimentação': '#E08E79', // Salmão
-  'Moradia': '#1A4A57',    // Azul Escuro
+  'Moradia': '#01256B',    // Azul Escuro
   'Transporte': '#D9A05B',  // Ouro
   'Saúde': '#6B8E23',      // Verde Oliva
   'Lazer': '#4E8D9C',      // Azul Médio
   'Educação': '#A0522D',   // Marrom
-  'Salário': '#2C6E7F',    // Verde Água/Azul Mar
+  'Salário': '#011640',    // Verde Água/Azul Mar
   'Freelance': '#7FB5C2',  // Azul Claro
   'Investimentos': '#8B5CF6', // Roxo
   'Trabalho': '#F59E0B',      // Âmbar
@@ -213,6 +246,24 @@ export default function FinanceApp({ session }) {
   const [state, dispatch] = useReducer(financeReducer, initialState);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteStep, setDeleteStep] = useState(1);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+
+  React.useEffect(() => {
+    if (session?.user) {
+      const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding_noazul');
+      const hasSeenUpdate = localStorage.getItem('hasSeenUpdate_v1');
+      if (!hasSeenOnboarding) {
+        setShowOnboarding(true);
+      } else if (!hasSeenUpdate) {
+        setShowUpdateModal(true);
+      }
+    }
+  }, [session]);
+  const [deleteOptions, setDeleteOptions] = useState({ transacoes: true, orcamentos: true, metas: true });
 
   React.useEffect(() => {
     if (session?.user) {
@@ -396,6 +447,7 @@ export default function FinanceApp({ session }) {
       } else {
         dispatch({ type: 'DELETE_FUTURE_RECURRING', payload: { descricao: transactionToDelete.descricao, data: transactionToDelete.data } });
         setTransactionToDelete(null);
+        toast.success('Transação excluída com sucesso!');
       }
     } else {
       const { error } = await supabase.from('transactions').delete().eq('id', transactionToDelete.id).eq('user_id', session.user.id);
@@ -405,6 +457,7 @@ export default function FinanceApp({ session }) {
       } else {
         dispatch({ type: 'DELETE_TRANSACTION', payload: transactionToDelete.id });
         setTransactionToDelete(null);
+        toast.success('Transação excluída com sucesso!');
       }
     }
     setTransactionToDelete(null);
@@ -422,6 +475,42 @@ export default function FinanceApp({ session }) {
     }
   };
 
+  const handleDeleteAllData = async () => {
+    try {
+      const promises = [];
+      const newTransactions = deleteOptions.transacoes ? [] : state.transactions;
+      const newBudgets = deleteOptions.orcamentos ? [] : state.budgets;
+      const newGoals = deleteOptions.metas ? [] : state.goals;
+
+      if (deleteOptions.transacoes) {
+        promises.push(supabase.from('transactions').delete().eq('user_id', session.user.id));
+      }
+      if (deleteOptions.orcamentos) {
+        promises.push(supabase.from('budgets').delete().eq('user_id', session.user.id));
+      }
+      if (deleteOptions.metas) {
+        promises.push(supabase.from('goals').delete().eq('user_id', session.user.id));
+      }
+      
+      await Promise.all(promises);
+      
+      dispatch({
+        type: 'SET_DATA',
+        payload: {
+          transactions: newTransactions,
+          budgets: newBudgets,
+          goals: newGoals
+        }
+      });
+      setIsDeleteModalOpen(false);
+      setDeleteStep(1);
+      setDeleteOptions({ transacoes: true, orcamentos: true, metas: true });
+      toast.success("Informações apagadas com sucesso!");
+    } catch (error) {
+      console.error("Erro ao apagar dados:", error);
+      toast.error("Erro ao apagar informações.");
+    }
+  };
   // Cálculos Globais Filtrados
   const filteredTransactions = useMemo(() => {
     return state.transactions.filter(t => {
@@ -505,10 +594,10 @@ export default function FinanceApp({ session }) {
               <span className="text-[11px] md:text-sm font-medium text-gray-500 uppercase tracking-wider">Saldo do Mês</span>
               <TooltipIcon icon={Activity} colorClass="text-[#E08E79]" text="Resultado de entradas menos saídas apenas do mês selecionado." />
             </div>
-            <div className={`text-lg md:text-2xl font-playfair font-bold truncate ${saldoAtualMes >= 0 ? 'text-[#1A4A57]' : 'text-red-700'}`}>{formatCurrency(saldoAtualMes)}</div>
+            <div className={`text-lg md:text-2xl font-playfair font-bold truncate ${saldoAtualMes >= 0 ? 'text-[#01256B]' : 'text-red-700'}`}>{formatCurrency(saldoAtualMes)}</div>
             <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
               <span className="text-sm text-gray-500 uppercase font-semibold">Acumulado Total:</span>
-              <span className="text-base font-extrabold text-[#2C6E7F]">{formatCurrency(saldoTotal)}</span>
+              <span className="text-base font-extrabold text-[#011640]">{formatCurrency(saldoTotal)}</span>
             </div>
           </div>
           <div className="bg-[#FDFAF4] p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -530,7 +619,7 @@ export default function FinanceApp({ session }) {
         {/* Gráficos */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
-            <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Fluxo de Caixa (6 meses)</h3>
+            <h3 className="font-playfair font-bold text-lg mb-4 text-[#011640]">Fluxo de Caixa (6 meses)</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData}>
@@ -538,14 +627,14 @@ export default function FinanceApp({ session }) {
                   <XAxis dataKey="name" axisLine={false} tickLine={false} />
                   <YAxis axisLine={false} tickLine={false} width={80} tickFormatter={(val) => formatCompactCurrency(val)} />
                   <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Bar dataKey="Entradas" fill="#2C6E7F" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Saídas" fill="#E08E79" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Entradas" fill="#059669" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Saídas" fill="#DC2626" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Despesas por Categoria</h3>
+            <h3 className="font-playfair font-bold text-lg mb-4 text-[#011640]">Despesas por Categoria</h3>
             <div className="h-80">
               {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -589,14 +678,14 @@ export default function FinanceApp({ session }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
             <div>
-              <h3 className="font-playfair font-bold text-lg text-[#1C2B2D] mb-1">Custo Fixo Anual (Previsão)</h3>
+              <h3 className="font-playfair font-bold text-lg text-[#011640] mb-1">Custo Fixo Anual (Previsão)</h3>
               <p className="text-sm text-gray-500">Baseado nas despesas recorrentes atuais (x12)</p>
             </div>
-            <div className="text-2xl font-playfair font-bold text-[#E08E79]">{formatCurrency(previsaoAnualRecorrente)}</div>
+            <div className="text-2xl font-playfair font-bold text-[#F59E0B]">{formatCurrency(previsaoAnualRecorrente)}</div>
           </div>
           <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
             <div>
-              <h3 className="font-playfair font-bold text-lg text-[#1C2B2D] mb-1">Dívida Futura (Parcelamentos)</h3>
+              <h3 className="font-playfair font-bold text-lg text-[#011640] mb-1">Dívida Futura (Parcelamentos)</h3>
               <p className="text-sm text-gray-500">Soma de todas as parcelas dos próximos meses</p>
             </div>
             <div className="text-2xl font-playfair font-bold text-red-700">{formatCurrency(faturasFuturas)}</div>
@@ -606,7 +695,7 @@ export default function FinanceApp({ session }) {
         {/* Últimas Transações */}
         <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100">
-            <h3 className="font-playfair font-bold text-lg text-[#1C2B2D]">Transações Recentes</h3>
+            <h3 className="font-playfair font-bold text-lg text-[#011640]">Transações Recentes</h3>
           </div>
           <div className="divide-y divide-gray-100">
             {state.transactions.slice(0, 5).map(t => (
@@ -616,7 +705,7 @@ export default function FinanceApp({ session }) {
                     {t.tipo === 'Entrada' ? <ArrowUpCircle className="w-5 h-5" /> : <ArrowDownCircle className="w-5 h-5" />}
                   </div>
                   <div>
-                    <p className="font-medium text-[#1C2B2D]">{t.descricao}</p>
+                    <p className="font-medium text-[#011640]">{t.descricao}</p>
                     <p className="text-xs text-gray-500">{t.data ? t.data.split('-').reverse().join('/') : ''} • {t.categoria}</p>
                   </div>
                 </div>
@@ -701,53 +790,54 @@ export default function FinanceApp({ session }) {
           dispatch({ type: 'ADD_TRANSACTION', payload: t });
         });
         setNovaTransacao({ descricao: '', valor: '', tipo: 'Saída', categoria: 'Alimentação', data: getDefaultDateForSelectedMonth(), frequencia: 'pontual', pagamento: 'a vista', parcelas: 1, metodo_pagamento: 'Pix' });
+        toast.success('Transação adicionada com sucesso!');
       }
     };
 
     return (
       <div className="space-y-6">
         <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Nova Transação</h3>
+          <h3 className="font-playfair font-bold text-lg mb-4 text-[#011640]">Nova Transação</h3>
           <form onSubmit={handleAdd} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                <input type="text" required value={novaTransacao.descricao} onChange={e => setNovaTransacao({ ...novaTransacao, descricao: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="Ex: Supermercado" />
+                <input type="text" required value={novaTransacao.descricao} onChange={e => setNovaTransacao({ ...novaTransacao, descricao: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" placeholder="Ex: Supermercado" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Data da 1ª Parcela</label>
-                <input type="date" required value={novaTransacao.data} onChange={e => setNovaTransacao({ ...novaTransacao, data: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" />
+                <input type="date" required value={novaTransacao.data} onChange={e => setNovaTransacao({ ...novaTransacao, data: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total (R$)</label>
-                <input type="text" required value={novaTransacao.valor} onChange={e => setNovaTransacao({ ...novaTransacao, valor: formatInputCurrency(e.target.value) })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0,00" />
+                <input type="text" required value={novaTransacao.valor} onChange={e => setNovaTransacao({ ...novaTransacao, valor: formatInputCurrency(e.target.value) })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" placeholder="0,00" />
               </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-7 gap-3 md:gap-4 items-end">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({ ...novaTransacao, tipo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({ ...novaTransacao, tipo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
                   <option value="Saída">Saída</option>
                   <option value="Entrada">Entrada</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                <select value={novaTransacao.categoria} onChange={e => setNovaTransacao({ ...novaTransacao, categoria: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                <select value={novaTransacao.categoria} onChange={e => setNovaTransacao({ ...novaTransacao, categoria: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
                   {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
-                <select disabled={novaTransacao.pagamento === 'parcelado'} value={novaTransacao.frequencia} onChange={e => setNovaTransacao({ ...novaTransacao, frequencia: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F] disabled:bg-gray-100">
+                <select disabled={novaTransacao.pagamento === 'parcelado'} value={novaTransacao.frequencia} onChange={e => setNovaTransacao({ ...novaTransacao, frequencia: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640] disabled:bg-gray-100">
                   <option value="pontual">Pontual</option>
                   <option value="recorrente">Mensal Fixa</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Método</label>
-                <select value={novaTransacao.metodo_pagamento} onChange={e => setNovaTransacao({ ...novaTransacao, metodo_pagamento: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                <select value={novaTransacao.metodo_pagamento} onChange={e => setNovaTransacao({ ...novaTransacao, metodo_pagamento: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
                   <option value="Pix">Pix</option>
                   <option value="Débito">Débito</option>
                   <option value="Crédito">Crédito</option>
@@ -756,7 +846,7 @@ export default function FinanceApp({ session }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>
-                <select value={novaTransacao.pagamento} onChange={e => setNovaTransacao({ ...novaTransacao, pagamento: e.target.value, frequencia: e.target.value === 'parcelado' ? 'pontual' : novaTransacao.frequencia })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+                <select value={novaTransacao.pagamento} onChange={e => setNovaTransacao({ ...novaTransacao, pagamento: e.target.value, frequencia: e.target.value === 'parcelado' ? 'pontual' : novaTransacao.frequencia })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
                   <option value="a vista">À vista</option>
                   <option value="parcelado">Parcelado</option>
                 </select>
@@ -764,11 +854,11 @@ export default function FinanceApp({ session }) {
               {novaTransacao.pagamento === 'parcelado' ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Qtd Parcelas</label>
-                  <input type="number" min="2" max="120" required value={novaTransacao.parcelas} onChange={e => setNovaTransacao({ ...novaTransacao, parcelas: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="10" />
+                  <input type="number" min="2" max="120" required value={novaTransacao.parcelas} onChange={e => setNovaTransacao({ ...novaTransacao, parcelas: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" placeholder="10" />
                 </div>
               ) : <div></div>}
               <div className="w-full">
-                <button type="submit" className="w-full bg-[#2C6E7F] text-white p-2 rounded-lg hover:bg-[#1A4A57] transition-colors flex items-center justify-center h-[42px]">
+                <button type="submit" className="w-full bg-[#011640] text-white p-2 rounded-lg hover:bg-[#01256B] transition-colors flex items-center justify-center h-[42px]">
                   <Plus className="w-5 h-5 mr-1" /> Adicionar
                 </button>
               </div>
@@ -794,7 +884,7 @@ export default function FinanceApp({ session }) {
                 {filteredTransactions.map(t => (
                   <tr key={t.id} className="hover:bg-[#fcf9f2]">
                     <td className="p-4 text-gray-600">{t.data ? t.data.split('-').reverse().join('/') : ''}</td>
-                    <td className="p-4 font-medium text-[#1C2B2D]">{t.descricao}</td>
+                    <td className="p-4 font-medium text-[#011640]">{t.descricao}</td>
                     <td className="p-4 text-gray-600">
                       <div className="flex items-center">
                         <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: getCategoryColor(t.categoria) }}></span>
@@ -838,7 +928,7 @@ export default function FinanceApp({ session }) {
                       {t.tipo}
                     </span>
                   </div>
-                  <h4 className="font-bold text-[#1C2B2D] truncate">{t.descricao}</h4>
+                  <h4 className="font-bold text-[#011640] truncate">{t.descricao}</h4>
                   <div className="flex items-center text-xs text-gray-500 mt-1">
                     <span className="w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: getCategoryColor(t.categoria) }}></span>
                     {t.categoria} {t.metodo_pagamento ? ` • ${t.metodo_pagamento}` : ''}
@@ -865,116 +955,150 @@ export default function FinanceApp({ session }) {
     );
   };
 
-  const renderControleMensal = () => {
-    // Evolução diária do saldo no mês
-    const diasNoMes = new Date(selectedYear, selectedMonth, 0).getDate();
-    let saldoAcumulado = 0;
-
-    // Calcula saldo anterior ao mês selecionado para o acumulado
-    saldoAcumulado = state.transactions.filter(t => {
-      if (!t.data) return false;
+  const renderAnalise = () => {
+    // Bloco 1: Projeção de Fechamento
+    const saldoAtualMes = totaisMes.entradas - totaisMes.saidas;
+    
+    // Contas fixas pendentes
+    const despesasRecorrentes = state.transactions.filter(t => {
+      if (!t.data || t.tipo !== 'Saída' || t.frequencia !== 'recorrente') return false;
       const [ano, mes] = t.data.split('-');
-      const d = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, 1);
-      return d < new Date(selectedYear, selectedMonth - 1, 1);
-    }).reduce((acc, t) => t.tipo === 'Entrada' ? acc + t.valor : acc - t.valor, 0);
+      return parseInt(mes, 10) === selectedMonth && parseInt(ano, 10) === selectedYear;
+    });
+    const contasFixasPendentes = despesasRecorrentes.filter(t => !t.pago).reduce((acc, curr) => acc + curr.valor, 0);
+    
+    const saldoProjetado = saldoAtualMes - contasFixasPendentes;
 
-    const hoje = new Date();
-    const isMesAtual = selectedYear === hoje.getFullYear() && selectedMonth === hoje.getMonth() + 1;
-    const isMesFuturo = new Date(selectedYear, selectedMonth - 1, 1) > hoje;
+    // Bloco 2: Top 5 Maiores Despesas (Vilões)
+    const topDespesas = [...filteredTransactions]
+      .filter(t => t.tipo === 'Saída')
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 5);
 
-    const lineData = [];
-    for (let i = 1; i <= diasNoMes; i++) {
-      const transDia = filteredTransactions.filter(t => t.data && parseInt(t.data.split('-')[2], 10) === i);
-      const valDia = transDia.reduce((acc, t) => t.tipo === 'Entrada' ? acc + t.valor : acc - t.valor, 0);
-
-      const isFutureDay = isMesFuturo || (isMesAtual && i > hoje.getDate());
-
-      if (!isFutureDay) {
-        saldoAcumulado += valDia;
-        lineData.push({ dia: i, saldo: saldoAcumulado });
+    // Bloco 3: Essencial vs Flexível
+    const categoriasEssenciais = ['Moradia', 'Saúde', 'Alimentação', 'Educação', 'Transporte'];
+    let gastoEssencial = 0;
+    let gastoFlexivel = 0;
+    
+    filteredTransactions.filter(t => t.tipo === 'Saída').forEach(t => {
+      if (categoriasEssenciais.includes(t.categoria)) {
+        gastoEssencial += t.valor;
       } else {
-        lineData.push({ dia: i, saldo: null });
+        gastoFlexivel += t.valor;
       }
-    }
-
-    // Resumo por categoria
-    const gastosCat = filteredTransactions.filter(t => t.tipo === 'Saída').reduce((acc, t) => {
-      acc[t.categoria] = (acc[t.categoria] || 0) + t.valor;
-      return acc;
-    }, {});
-
-    const arrayCat = Object.keys(gastosCat).map(k => ({ categoria: k, total: gastosCat[k] })).sort((a, b) => b.total - a.total);
-    const maiorGasto = arrayCat.length > 0 ? arrayCat[0] : null;
+    });
+    
+    const totalSaidasAnalise = gastoEssencial + gastoFlexivel;
+    const percEssencial = totalSaidasAnalise > 0 ? (gastoEssencial / totalSaidasAnalise) * 100 : 0;
+    const percFlexivel = totalSaidasAnalise > 0 ? (gastoFlexivel / totalSaidasAnalise) * 100 : 0;
 
     return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <span className="text-sm font-medium text-gray-500">Total Entradas</span>
-            <div className="text-2xl font-playfair font-bold text-green-700 mt-2">{formatCurrency(totaisMes.entradas)}</div>
-          </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <span className="text-sm font-medium text-gray-500">Total Saídas</span>
-            <div className="text-2xl font-playfair font-bold text-red-700 mt-2">{formatCurrency(totaisMes.saidas)}</div>
-          </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <span className="text-sm font-medium text-gray-500">Saldo do Mês</span>
-            <div className={`text-2xl font-playfair font-bold mt-2 ${totaisMes.entradas - totaisMes.saidas >= 0 ? 'text-[#2C6E7F]' : 'text-red-600'}`}>
-              {formatCurrency(totaisMes.entradas - totaisMes.saidas)}
+      <div className="space-y-6 animate-in fade-in duration-200">
+        
+        {/* Projeção */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
+            <span className="text-sm font-medium text-gray-500 mb-1">Saldo Atual do Mês</span>
+            <div className={`text-3xl font-playfair font-bold ${saldoAtualMes >= 0 ? 'text-[#011640]' : 'text-red-600'}`}>
+              {formatCurrency(saldoAtualMes)}
             </div>
           </div>
-          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-            <span className="text-sm font-medium text-gray-500">Maior Gasto</span>
-            <div className="text-xl font-playfair font-bold text-[#1C2B2D] mt-2 truncate">
-              {maiorGasto ? maiorGasto.categoria : '-'}
+          <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
+            <span className="text-sm font-medium text-gray-500 mb-1">Contas Fixas Pendentes</span>
+            <div className={`text-3xl font-playfair font-bold ${contasFixasPendentes > 0 ? 'text-[#E08E79]' : 'text-green-600'}`}>
+              {formatCurrency(contasFixasPendentes)}
             </div>
-            <div className="text-sm text-gray-500">{maiorGasto ? formatCurrency(maiorGasto.total) : ''}</div>
+            <span className="text-xs text-gray-400 mt-2">Valores não marcados no Checklist</span>
+          </div>
+          <div className="bg-gradient-to-br from-[#011640] to-[#01256B] p-6 rounded-2xl shadow-sm border border-[#011640] flex flex-col text-white">
+            <span className="text-sm font-medium text-blue-200 mb-1">Saldo Livre Projetado</span>
+            <div className={`text-3xl font-playfair font-bold ${saldoProjetado >= 0 ? 'text-white' : 'text-red-300'}`}>
+              {formatCurrency(saldoProjetado)}
+            </div>
+            <span className="text-xs text-blue-200 mt-2">O que sobra após pagar as contas fixas</span>
           </div>
         </div>
 
-        <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Evolução do Saldo</h3>
-          <div className="h-[500px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineData} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="dia" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} width={80} interval={0} domain={[0, 6000]} ticks={[100, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]} tickFormatter={(val) => formatCompactCurrency(val)} />
-                <Tooltip formatter={(value) => formatCurrency(value)} labelFormatter={(label) => `Dia ${label}`} />
-                <Line
-                  type="monotone"
-                  dataKey="saldo"
-                  stroke="#2C6E7F"
-                  strokeWidth={3}
-                  dot={(props) => {
-                    if (isMesAtual && props.payload.dia === hoje.getDate()) {
-                      return <circle key={props.key} cx={props.cx} cy={props.cy} r={5} fill="#2C6E7F" stroke="white" strokeWidth={2} />;
-                    }
-                    return null;
-                  }}
-                  activeDot={{ r: 8 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Resumo por Categoria (Saídas)</h3>
-          <div className="space-y-4">
-            {arrayCat.map(cat => (
-              <div key={cat.categoria} className="flex items-center">
-                <div className="w-1/3 font-medium text-gray-700">{cat.categoria}</div>
-                <div className="w-2/3 flex items-center">
-                  <div className="w-full bg-gray-200 rounded-full h-2.5 mr-4">
-                    <div className="bg-[#E08E79] h-2.5 rounded-full" style={{ width: `${Math.min(100, (cat.total / totaisMes.saidas) * 100)}%` }}></div>
+        {/* Blocos Inferiores */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* Top 5 */}
+          <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
+            <h3 className="font-playfair font-bold text-xl mb-6 text-[#011640] flex items-center gap-2">
+              <TrendingUp className="w-6 h-6 text-[#F59E0B]" />
+              Top 5 Maiores Despesas
+            </h3>
+            {topDespesas.length > 0 ? (
+              <div className="space-y-4">
+                {topDespesas.map((t, idx) => (
+                  <div key={t.id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-xl transition-colors border border-transparent hover:border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm">
+                        {idx + 1}º
+                      </div>
+                      <div>
+                        <div className="font-medium text-[#011640]">{t.descricao}</div>
+                        <div className="text-xs text-gray-500">{t.categoria} • {t.data?.split('-').reverse().join('/')}</div>
+                      </div>
+                    </div>
+                    <div className="font-bold text-[#E08E79]">
+                      {formatCurrency(t.valor)}
+                    </div>
                   </div>
-                  <div className="w-24 text-right text-sm font-medium">{formatCurrency(cat.total)}</div>
-                  <div className="w-16 text-right text-xs text-gray-500">{((cat.total / totaisMes.saidas) * 100).toFixed(1)}%</div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">Nenhuma despesa registrada neste mês.</div>
+            )}
+          </div>
+
+          {/* Essencial vs Flexivel */}
+          <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
+            <h3 className="font-playfair font-bold text-xl mb-6 text-[#011640] flex items-center gap-2">
+              <PieChartIcon className="w-6 h-6 text-[#4E8D9C]" />
+              Essencial vs Estilo de Vida
+            </h3>
+            <div className="flex-1 flex flex-col justify-center space-y-8">
+              <div>
+                <div className="flex justify-between items-end mb-2">
+                  <div>
+                    <span className="font-medium text-[#011640] flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#011640]"></div> Essencial</span>
+                    <p className="text-xs text-gray-500 mt-1">Moradia, Saúde, Alimentação, Transporte, Educação</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-lg text-[#011640]">{formatCurrency(gastoEssencial)}</div>
+                    <div className="text-sm text-gray-500">{percEssencial.toFixed(1)}%</div>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div className="bg-[#011640] h-3 rounded-full" style={{ width: `${percEssencial}%` }}></div>
                 </div>
               </div>
-            ))}
+
+              <div>
+                <div className="flex justify-between items-end mb-2">
+                  <div>
+                    <span className="font-medium text-[#011640] flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#F59E0B]"></div> Estilo de Vida</span>
+                    <p className="text-xs text-gray-500 mt-1">Lazer, Outros e despesas flexíveis</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-lg text-[#F59E0B]">{formatCurrency(gastoFlexivel)}</div>
+                    <div className="text-sm text-gray-500">{percFlexivel.toFixed(1)}%</div>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div className="bg-[#F59E0B] h-3 rounded-full" style={{ width: `${percFlexivel}%` }}></div>
+                </div>
+              </div>
+              
+              <div className="bg-[#011640]/5 p-4 rounded-xl mt-4 border border-[#011640]/10">
+                <p className="text-sm text-gray-700 italic">
+                  <strong>Dica:</strong> Uma regra popular de finanças recomenda destinar cerca de 50% da sua renda para essenciais, 30% para estilo de vida e 20% para metas/investimentos.
+                </p>
+              </div>
+            </div>
           </div>
+          
         </div>
       </div>
     );
@@ -1031,19 +1155,19 @@ export default function FinanceApp({ session }) {
     return (
       <div className="space-y-6">
         <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Definir Orçamento</h3>
+          <h3 className="font-playfair font-bold text-lg mb-4 text-[#011640]">Definir Orçamento</h3>
           <form onSubmit={handleAddBudget} className="flex gap-4 items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-              <select value={novoOrcamento.categoria} onChange={e => setNovoOrcamento({ ...novoOrcamento, categoria: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]">
+              <select value={novoOrcamento.categoria} onChange={e => setNovoOrcamento({ ...novoOrcamento, categoria: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
                 {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Valor Limite (R$)</label>
-              <input type="number" step="0.01" required value={novoOrcamento.valor} onChange={e => setNovoOrcamento({ ...novoOrcamento, valor: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
+              <input type="number" step="0.01" required value={novoOrcamento.valor} onChange={e => setNovoOrcamento({ ...novoOrcamento, valor: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" placeholder="0.00" />
             </div>
-            <button type="submit" className="bg-[#2C6E7F] text-white p-2 px-6 rounded-lg hover:bg-[#1A4A57] transition-colors h-[42px]">
+            <button type="submit" className="bg-[#011640] text-white p-2 px-6 rounded-lg hover:bg-[#01256B] transition-colors h-[42px]">
               Salvar
             </button>
           </form>
@@ -1061,7 +1185,7 @@ export default function FinanceApp({ session }) {
                 <div className="flex justify-between items-center mb-2">
                   <div className="flex items-center">
                     <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: getCategoryColor(budget.categoria) }}></span>
-                    <h4 className="font-bold text-[#1C2B2D]">{budget.categoria}</h4>
+                    <h4 className="font-bold text-[#011640]">{budget.categoria}</h4>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className={`text-xs font-bold ${isOver ? 'text-red-600' : 'text-gray-500'}`}>{percentual.toFixed(0)}%</span>
@@ -1128,14 +1252,14 @@ export default function FinanceApp({ session }) {
                 <div
                   key={dia}
                   onClick={() => hasTrans && setSelectedDay({ dia, transacoes: transDoDia })}
-                  className={`p-2 border rounded-xl min-h-[80px] flex flex-col justify-between transition-all ${hasTrans ? 'cursor-pointer hover:border-[#2C6E7F] bg-white border-gray-200' : 'border-gray-100 bg-gray-50 opacity-50'}`}
+                  className={`p-2 border rounded-xl min-h-[80px] flex flex-col justify-between transition-all ${hasTrans ? 'cursor-pointer hover:border-[#011640] bg-white border-gray-200' : 'border-gray-100 bg-gray-50 opacity-50'}`}
                 >
                   <div className="text-right font-medium text-gray-700">{dia}</div>
                   {hasTrans && (
                     <div className="text-center mt-2">
                       <div className={`w-3 h-3 rounded-full mx-auto mb-1 ${saldo >= 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <div className={`text-[10px] font-bold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {saldo > 0 ? '+' : ''}{Math.round(saldo)}
+                      <div className={`text-sm font-bold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {saldo > 0 ? '+' : ''}{formatCurrency(saldo)}
                       </div>
                     </div>
                   )}
@@ -1146,15 +1270,15 @@ export default function FinanceApp({ session }) {
         </div>
 
         {selectedDay && (
-          <div className="w-80 bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-[#2C6E7F]">
+          <div className="w-80 bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-[#011640]">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-playfair font-bold text-lg text-[#1C2B2D]">Dia {selectedDay.dia}</h3>
+              <h3 className="font-playfair font-bold text-lg text-[#011640]">Dia {selectedDay.dia}</h3>
               <button onClick={() => setSelectedDay(null)} className="text-gray-400 hover:text-gray-700">✕</button>
             </div>
             <div className="space-y-3">
               {selectedDay.transacoes.map(t => (
                 <div key={t.id} className="p-3 border border-gray-100 rounded-lg bg-white">
-                  <div className="text-sm font-medium text-[#1C2B2D]">{t.descricao}</div>
+                  <div className="text-sm font-medium text-[#011640]">{t.descricao}</div>
                   <div className="flex justify-between mt-1 text-xs">
                     <span className="text-gray-500">{t.categoria}</span>
                     <span className={`font-bold ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-600'}`}>
@@ -1190,12 +1314,12 @@ export default function FinanceApp({ session }) {
         <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
             <div>
-              <h3 className="font-playfair font-bold text-xl text-[#1C2B2D]">Checklist de Despesas Fixas</h3>
+              <h3 className="font-playfair font-bold text-xl text-[#011640]">Checklist de Despesas Fixas</h3>
               <p className="text-sm text-gray-500 mt-1">Acompanhe o pagamento das suas contas mensais recorrentes.</p>
             </div>
             <div className="text-right">
               <span className="text-sm font-semibold text-gray-500 uppercase">Progresso de Contas</span>
-              <div className="text-2xl font-playfair font-bold text-[#2C6E7F]">
+              <div className="text-2xl font-playfair font-bold text-[#011640]">
                 {pagas} de {totalDespesas} pagas ({percentual.toFixed(0)}%)
               </div>
             </div>
@@ -1203,7 +1327,7 @@ export default function FinanceApp({ session }) {
 
           <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
             <div
-              className="h-3 rounded-full bg-[#2C6E7F] transition-all duration-500"
+              className="h-3 rounded-full bg-[#011640] transition-all duration-500"
               style={{ width: `${percentual}%` }}
             ></div>
           </div>
@@ -1223,7 +1347,7 @@ export default function FinanceApp({ session }) {
         {/* Lista de Contas */}
         <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-            <h4 className="font-playfair font-bold text-lg text-[#1C2B2D]">Contas do Mês</h4>
+            <h4 className="font-playfair font-bold text-lg text-[#011640]">Contas do Mês</h4>
             <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">
               Apenas Contas Mensais Fixas
             </span>
@@ -1243,10 +1367,10 @@ export default function FinanceApp({ session }) {
                       type="checkbox"
                       checked={!!t.pago}
                       readOnly
-                      className="w-5 h-5 rounded text-[#2C6E7F] focus:ring-[#2C6E7F] cursor-pointer"
+                      className="w-5 h-5 rounded text-[#011640] focus:ring-[#011640] cursor-pointer"
                     />
                     <div>
-                      <p className={`font-medium ${t.pago ? 'line-through text-gray-400' : 'text-[#1C2B2D]'}`}>
+                      <p className={`font-medium ${t.pago ? 'line-through text-gray-400' : 'text-[#011640]'}`}>
                         {t.descricao}
                       </p>
                       <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-1">
@@ -1326,6 +1450,7 @@ export default function FinanceApp({ session }) {
     };
 
     const metasEmAndamento = state.goals.filter(goal => !goal.concluida);
+    const metasConcluidas = state.goals.filter(goal => goal.concluida);
 
     return (
       <div className="space-y-6">
@@ -1343,7 +1468,7 @@ export default function FinanceApp({ session }) {
 
             return (
               <div key={goal.id} className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
-                <h4 className="font-playfair font-bold text-[#1C2B2D] text-lg mb-2">{goal.nome}</h4>
+                <h4 className="font-playfair font-bold text-[#011640] text-lg mb-2">{goal.nome}</h4>
                 <div className="w-32 h-32 mb-2 relative">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -1368,18 +1493,43 @@ export default function FinanceApp({ session }) {
           )}
         </div>
 
+        {metasConcluidas.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="font-playfair font-bold text-lg text-[#011640] flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-500" />
+              Metas Conquistadas
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {metasConcluidas.map(goal => (
+                <div key={`concluida-${goal.id}`} className="bg-gradient-to-br from-yellow-50 to-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-yellow-200 flex flex-col items-center relative overflow-hidden">
+                  <div className="absolute -top-4 -right-4 p-3 opacity-10">
+                    <Trophy className="w-24 h-24 text-yellow-600" />
+                  </div>
+                  <h4 className="font-playfair font-bold text-[#011640] text-lg mb-2 relative z-10 text-center">{goal.nome}</h4>
+                  <div className="w-32 h-32 mb-2 relative z-10 flex items-center justify-center">
+                     <div className="w-24 h-24 rounded-full bg-yellow-100 flex items-center justify-center border-4 border-yellow-400 shadow-inner">
+                       <span className="text-xl font-bold text-yellow-600">100%</span>
+                     </div>
+                  </div>
+                  <div className="text-sm font-medium text-gray-500 mb-1 relative z-10">Conquistada: {formatCurrency(goal.valor_alvo)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-[#FDFAF4] p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h3 className="font-playfair font-bold text-lg mb-4 text-[#1C2B2D]">Nova Meta</h3>
+          <h3 className="font-playfair font-bold text-lg mb-4 text-[#011640]">Nova Meta</h3>
           <form onSubmit={handleAddGoal} className="flex gap-4 items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Meta</label>
-              <input type="text" required value={novaMeta.nome} onChange={e => setNovaMeta({ ...novaMeta, nome: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="Ex: Viagem, Carro Novo" />
+              <input type="text" required value={novaMeta.nome} onChange={e => setNovaMeta({ ...novaMeta, nome: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" placeholder="Ex: Viagem, Carro Novo" />
             </div>
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total Necessário (R$)</label>
-              <input type="number" step="0.01" required value={novaMeta.valor_alvo} onChange={e => setNovaMeta({ ...novaMeta, valor_alvo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#2C6E7F]" placeholder="0.00" />
+              <input type="number" step="0.01" required value={novaMeta.valor_alvo} onChange={e => setNovaMeta({ ...novaMeta, valor_alvo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" placeholder="0.00" />
             </div>
-            <button type="submit" className="bg-[#2C6E7F] text-white p-2 px-6 rounded-lg hover:bg-[#1A4A57] transition-colors h-[42px] flex items-center">
+            <button type="submit" className="bg-[#011640] text-white p-2 px-6 rounded-lg hover:bg-[#01256B] transition-colors h-[42px] flex items-center">
               <PlusCircle className="w-5 h-5 mr-1" /> Criar Meta
             </button>
           </form>
@@ -1387,7 +1537,7 @@ export default function FinanceApp({ session }) {
 
         <div className="bg-[#FDFAF4] rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100">
-            <h3 className="font-playfair font-bold text-lg text-[#1C2B2D]">Acompanhamento de Metas</h3>
+            <h3 className="font-playfair font-bold text-lg text-[#011640]">Acompanhamento de Metas</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -1404,7 +1554,7 @@ export default function FinanceApp({ session }) {
               <tbody className="divide-y divide-gray-100">
                 {state.goals.map(goal => (
                   <tr key={goal.id} className="hover:bg-[#fcf9f2]">
-                    <td className="p-4 font-medium text-[#1C2B2D]">{goal.nome}</td>
+                    <td className="p-4 font-medium text-[#011640]">{goal.nome}</td>
                     <td className="p-4 text-gray-600">{formatCurrency(goal.valor_atual)}</td>
                     <td className="p-4 text-gray-600">{formatCurrency(goal.valor_alvo)}</td>
                     <td className="p-4 text-red-600 font-medium">{formatCurrency(goal.valor_alvo - goal.valor_atual)}</td>
@@ -1415,7 +1565,7 @@ export default function FinanceApp({ session }) {
                             type="number" step="0.01" required placeholder="0.00"
                             value={addValorMeta.metaId === goal.id ? addValorMeta.valor : ''}
                             onChange={(e) => setAddValorMeta({ metaId: goal.id, valor: e.target.value })}
-                            className="w-24 rounded-lg border-gray-300 border p-1 text-sm focus:ring-[#2C6E7F]"
+                            className="w-24 rounded-lg border-gray-300 border p-1 text-sm focus:ring-[#011640]"
                           />
                           <button type="submit" className="text-xs bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded-lg transition-colors">
                             Adicionar
@@ -1448,16 +1598,16 @@ export default function FinanceApp({ session }) {
   };
   const renderManual = () => {
     return (
-      <div className="bg-[#FDFAF4] p-8 rounded-2xl shadow-sm border border-gray-100 max-w-4xl mx-auto space-y-6 text-[#1C2B2D] animate-in fade-in duration-200">
-        <h3 className="font-playfair font-bold text-3xl mb-2 text-[#1C2B2D]">Manual de Uso — No Azul</h3>
+      <div className="bg-[#FDFAF4] p-8 rounded-2xl shadow-sm border border-gray-100 max-w-4xl mx-auto space-y-6 text-[#011640] animate-in fade-in duration-200">
+        <h3 className="font-playfair font-bold text-3xl mb-2 text-[#011640]">Manual de Uso — No Azul</h3>
         <p className="text-gray-600 border-b border-gray-100 pb-4">
           O <strong>No Azul</strong> é um sistema completo e intuitivo para controle de finanças pessoais, projetado para ajudar você a gerenciar suas receitas, despesas, orçamentos, metas financeiras e compromissos recorrentes de forma organizada e segura.
         </p>
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
-              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">📊</span> Dashboard
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Dashboard
             </h4>
             <p className="text-sm text-gray-600 leading-relaxed">
               Sua visão geral sobre a saúde financeira do mês selecionado. Ele exibe o saldo do mês, saldo acumulado total histórico, entradas, saídas, gráficos do fluxo de caixa dos últimos 6 meses, gráfico de pizza com as despesas por categoria, previsão de custo fixo anual e dívidas futuras em parcelamento.
@@ -1465,8 +1615,8 @@ export default function FinanceApp({ session }) {
           </section>
 
           <section className="space-y-2">
-            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
-              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">💸</span> Transações
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Transações
             </h4>
             <p className="text-sm text-gray-600 leading-relaxed">
               Permite cadastrar e gerenciar toda a movimentação financeira. Você pode lançar despesas/receitas pontuais ou <strong>Mensais Fixas</strong> (que são replicadas por 12 meses). Também suporta parcelamento, dividindo o valor total nas parcelas correspondentes.
@@ -1477,17 +1627,26 @@ export default function FinanceApp({ session }) {
           </section>
 
           <section className="space-y-2">
-            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
-              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">☑️</span> Checklist (Despesas Fixas)
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Checklist (Despesas Fixas)
             </h4>
             <p className="text-sm text-gray-600 leading-relaxed">
-              Um checklist automático contendo todas as suas despesas Mensais Fixas. Você pode clicar no item para marcar se a conta já foi paga ou se continua pendente, acompanhando o progresso e o somatório pago em tempo real.
+              Um checklist automático contendo todas as suas despesas Mensais Fixas.
             </p>
           </section>
 
           <section className="space-y-2">
-            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
-              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">📈</span> Controle Mensal
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Análise Avançada
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed text-balance">
+              Uma ferramenta de "Raio-X" da sua vida financeira. Projeta qual será o seu Saldo Livre no fim do mês após pagar as contas fixas, identifica o "Top 5" dos maiores gastos e cruza suas despesas entre Essenciais e de Estilo de Vida.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Controle Mensal
             </h4>
             <p className="text-sm text-gray-600 leading-relaxed">
               Exibe um gráfico de linha interativo com a evolução diária do saldo e uma listagem proporcional de saídas por categoria em porcentagem e valor absoluto.
@@ -1495,8 +1654,8 @@ export default function FinanceApp({ session }) {
           </section>
 
           <section className="space-y-2">
-            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
-              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">🎯</span> Orçamento
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Orçamento
             </h4>
             <p className="text-sm text-gray-600 leading-relaxed">
               Defina limites de gastos mensais por categoria. O sistema exibe um alerta visual: verde para consumo controlado, amarelo se passar de 80% do limite, e vermelho com aviso de "Estourou" caso o limite seja ultrapassado.
@@ -1504,8 +1663,8 @@ export default function FinanceApp({ session }) {
           </section>
 
           <section className="space-y-2">
-            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
-              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">🏆</span> Metas
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Metas
             </h4>
             <p className="text-sm text-gray-600 leading-relaxed">
               Planeje economizar dinheiro com objetivos específicos. Acompanhe a evolução percentual em gráficos circulares interativos, adicione fundos conforme economiza e marque-as como concluídas ao finalizar.
@@ -1513,8 +1672,8 @@ export default function FinanceApp({ session }) {
           </section>
 
           <section className="space-y-2">
-            <h4 className="font-playfair font-bold text-xl text-[#2C6E7F] flex items-center gap-2">
-              <span className="p-1.5 bg-[#2C6E7F]/10 rounded-lg text-[#2C6E7F]">📅</span> Calendário
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Calendário
             </h4>
             <p className="text-sm text-gray-600 leading-relaxed">
               Exibição visual dos seus lançamentos dispostos nos dias do mês com cores indicativas (saldo diário positivo ou negativo). Clique em qualquer dia ativo para visualizar em detalhes todas as transações ocorridas.
@@ -1528,9 +1687,9 @@ export default function FinanceApp({ session }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'transacoes', label: 'Transações', icon: <ArrowRightLeft className="w-5 h-5" /> },
-    { id: 'checklist', label: 'Checklist', icon: <CheckSquare className="w-5 h-5" /> },
-    { id: 'mensal', label: 'Controle Mensal', icon: <Activity className="w-5 h-5" /> },
-    { id: 'orcamento', label: 'Orçamento', icon: <Target className="w-5 h-5" /> },
+    { id: 'checklist', label: 'Checklist Fixas', icon: <CheckSquare className="w-5 h-5" /> },
+    { id: 'analise', label: 'Análise', icon: <PieChartIcon className="w-5 h-5" /> },
+    { id: 'orcamento', label: 'Orçamentos', icon: <Target className="w-5 h-5" /> },
     { id: 'metas', label: 'Metas', icon: <Trophy className="w-5 h-5" /> },
     { id: 'calendario', label: 'Calendário', icon: <CalendarDays className="w-5 h-5" /> },
     { id: 'manual', label: 'Manual', icon: <BookOpen className="w-5 h-5" /> }
@@ -1540,11 +1699,12 @@ export default function FinanceApp({ session }) {
 
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden font-dm bg-[#F5F0E8]">
+      <Toaster position="top-right" />
       {/* Sidebar for Desktop */}
-      <aside className="hidden md:flex w-64 bg-[#1C2B2D] text-white flex-col z-20">
+      <aside className="hidden md:flex w-64 bg-gradient-to-b from-[#1B344A] to-[#011640] text-white flex-col z-20">
         <div className="p-6">
           <h1 className="font-playfair text-2xl font-bold flex items-center text-[#FDFAF4]">
-            <Wallet className="mr-2 text-[#7FB5C2]" /> No Azul
+            <Wallet className="mr-2 text-[#011640]" /> No Azul
           </h1>
         </div>
         <nav className="flex-1 px-4 space-y-2 mt-4">
@@ -1552,26 +1712,37 @@ export default function FinanceApp({ session }) {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-[#2C6E7F] text-white shadow-lg' : 'text-gray-400 hover:bg-[#1A4A57] hover:text-white'}`}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-[#011640] text-white shadow-lg' : 'text-gray-400 hover:bg-[#01256B] hover:text-white'}`}
             >
               {item.icon}
               <span className="font-medium">{item.label}</span>
             </button>
           ))}
         </nav>
-        <div className="p-4">
+        <div className="p-4 space-y-2">
           <button
             onClick={() => supabase.auth.signOut()}
-            className="w-full flex items-center justify-center space-x-2 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-medium"
+            className="w-full flex items-center justify-center space-x-2 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-medium border border-red-400/20"
           >
             <LogOut className="w-5 h-5" />
             <span>Sair</span>
+          </button>
+          <button
+            onClick={() => {
+              setDeleteStep(1);
+              setDeleteOptions({ transacoes: true, orcamentos: true, metas: true });
+              setIsDeleteModalOpen(true);
+            }}
+            className="w-full flex items-center justify-center space-x-2 p-3 text-red-600 hover:bg-red-600/10 rounded-xl transition-all font-medium border border-red-600/20"
+          >
+            <Trash2 className="w-5 h-5" />
+            <span>Apagar Tudo</span>
           </button>
         </div>
       </aside>
 
       {/* Bottom Nav for Mobile */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#1C2B2D] text-white flex justify-around p-2 pb-safe z-50 rounded-t-2xl shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gradient-to-r from-[#1B344A] to-[#011640] text-white flex justify-around p-2 pb-safe z-50 rounded-t-2xl shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)]">
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
           return (
@@ -1580,7 +1751,7 @@ export default function FinanceApp({ session }) {
               onClick={() => setActiveTab(item.id)}
               className={`flex flex-col items-center p-2 rounded-xl transition-all ${isActive ? 'text-white' : 'text-gray-400'}`}
             >
-              <div className={`p-1.5 rounded-lg ${isActive ? 'bg-[#2C6E7F]' : ''}`}>
+              <div className={`p-1.5 rounded-lg ${isActive ? 'bg-[#011640]' : ''}`}>
                 {item.icon}
               </div>
               <span className="text-[10px] mt-1 font-medium">{item.label.split(' ')[0]}</span>
@@ -1593,7 +1764,7 @@ export default function FinanceApp({ session }) {
       <main className="flex-1 flex flex-col overflow-hidden bg-[#F5F0E8] pb-20 md:pb-0">
         {/* Header Fix */}
         <header className="bg-[#FDFAF4] border-b border-gray-200 p-4 px-8 flex justify-between items-center shadow-sm z-10">
-          <h2 className="font-playfair text-2xl font-bold text-[#1C2B2D]">
+          <h2 className="font-playfair text-2xl font-bold text-[#011640]">
             {navItems.find(i => i.id === activeTab)?.label}
           </h2>
 
@@ -1604,8 +1775,8 @@ export default function FinanceApp({ session }) {
             }} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <div className="font-medium text-[#1C2B2D] w-32 text-center select-none flex items-center justify-center">
-              <CalendarIcon className="w-4 h-4 mr-2 text-[#2C6E7F]" />
+            <div className="font-medium text-[#011640] w-32 text-center select-none flex items-center justify-center">
+              <CalendarIcon className="w-4 h-4 mr-2 text-[#011640]" />
               {meses[selectedMonth - 1]} {selectedYear}
             </div>
             <button onClick={() => {
@@ -1623,7 +1794,7 @@ export default function FinanceApp({ session }) {
             {activeTab === 'dashboard' && renderDashboard()}
             {activeTab === 'transacoes' && renderTransacoes()}
             {activeTab === 'checklist' && renderChecklist()}
-            {activeTab === 'mensal' && renderControleMensal()}
+            {activeTab === 'analise' && renderAnalise()}
             {activeTab === 'orcamento' && renderOrcamento()}
             {activeTab === 'metas' && renderMetas()}
             {activeTab === 'calendario' && renderCalendario()}
@@ -1637,7 +1808,7 @@ export default function FinanceApp({ session }) {
               <div className="flex justify-center mb-4 text-red-500">
                 <AlertCircle className="w-12 h-12" />
               </div>
-              <h3 className="text-xl font-playfair font-bold text-center text-[#1C2B2D] mb-2">Excluir Transação</h3>
+              <h3 className="text-xl font-playfair font-bold text-center text-[#011640] mb-2">Excluir Transação</h3>
               <p className="text-center text-gray-500 mb-6">
                 {transactionToDelete.frequencia === 'recorrente'
                   ? 'Esta é uma transação Mensal Fixa. Deseja excluir apenas este lançamento ou todas as futuras cobranças também?'
@@ -1676,7 +1847,7 @@ export default function FinanceApp({ session }) {
               <div className="flex justify-center mb-4 text-red-500">
                 <AlertCircle className="w-12 h-12" />
               </div>
-              <h3 className="text-xl font-playfair font-bold text-center text-[#1C2B2D] mb-2">Excluir Meta</h3>
+              <h3 className="text-xl font-playfair font-bold text-center text-[#011640] mb-2">Excluir Meta</h3>
               <p className="text-center text-gray-500 mb-6">
                 Tem certeza que deseja apagar a meta "{goalToDelete.nome}"? Esta ação não pode ser desfeita.
               </p>
@@ -1696,35 +1867,35 @@ export default function FinanceApp({ session }) {
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md border border-gray-100 animate-in fade-in zoom-in duration-200">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-playfair font-bold text-[#1C2B2D]">Editar Transação</h3>
+                <h3 className="text-xl font-playfair font-bold text-[#011640]">Editar Transação</h3>
                 <button onClick={() => setTransactionToEdit(null)} className="text-gray-400 hover:text-gray-600">✕</button>
               </div>
               <form onSubmit={handleEditSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                  <input type="text" required value={transactionToEdit.descricao} onChange={e => setTransactionToEdit({ ...transactionToEdit, descricao: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] focus:border-transparent outline-none transition-all" />
+                  <input type="text" required value={transactionToEdit.descricao} onChange={e => setTransactionToEdit({ ...transactionToEdit, descricao: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#011640] focus:border-transparent outline-none transition-all" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Valor</label>
-                    <input type="text" required value={formatInputCurrency(transactionToEdit.valor)} onChange={e => setTransactionToEdit({ ...transactionToEdit, valor: formatInputCurrency(e.target.value) })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none" />
+                    <input type="text" required value={formatInputCurrency(transactionToEdit.valor)} onChange={e => setTransactionToEdit({ ...transactionToEdit, valor: formatInputCurrency(e.target.value) })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#011640] outline-none" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                    <input type="date" required value={transactionToEdit.data} onChange={e => setTransactionToEdit({ ...transactionToEdit, data: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none" />
+                    <input type="date" required value={transactionToEdit.data} onChange={e => setTransactionToEdit({ ...transactionToEdit, data: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#011640] outline-none" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                    <select value={transactionToEdit.tipo} onChange={e => setTransactionToEdit({ ...transactionToEdit, tipo: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
+                    <select value={transactionToEdit.tipo} onChange={e => setTransactionToEdit({ ...transactionToEdit, tipo: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#011640] outline-none">
                       <option value="Saída">Saída</option>
                       <option value="Entrada">Entrada</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                    <select value={transactionToEdit.categoria} onChange={e => setTransactionToEdit({ ...transactionToEdit, categoria: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
+                    <select value={transactionToEdit.categoria} onChange={e => setTransactionToEdit({ ...transactionToEdit, categoria: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#011640] outline-none">
                       {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
@@ -1732,7 +1903,7 @@ export default function FinanceApp({ session }) {
 
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Método</label>
-                  <select value={transactionToEdit.metodo_pagamento || 'Pix'} onChange={e => setTransactionToEdit({ ...transactionToEdit, metodo_pagamento: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#2C6E7F] outline-none">
+                  <select value={transactionToEdit.metodo_pagamento || 'Pix'} onChange={e => setTransactionToEdit({ ...transactionToEdit, metodo_pagamento: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#011640] outline-none">
                     <option value="Pix">Pix</option>
                     <option value="Débito">Débito</option>
                     <option value="Crédito">Crédito</option>
@@ -1759,11 +1930,230 @@ export default function FinanceApp({ session }) {
                   <button type="button" onClick={() => setTransactionToEdit(null)} className="flex-1 py-3 rounded-xl text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium transition-colors">
                     Cancelar
                   </button>
-                  <button type="submit" className="flex-1 py-3 rounded-xl text-white bg-[#2C6E7F] hover:bg-[#1A4A57] font-medium transition-colors">
+                  <button type="submit" className="flex-1 py-3 rounded-xl text-white bg-[#011640] hover:bg-[#01256B] font-medium transition-colors">
                     Salvar Alterações
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-[#FDFAF4] rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+              
+              {deleteStep === 1 ? (
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                    <AlertCircle className="w-8 h-8 text-red-600" />
+                  </div>
+                  <h3 className="font-playfair text-2xl font-bold text-[#011640] mb-2">Apagar Informações?</h3>
+                  <p className="text-gray-600 mb-6 text-balance">
+                    ATENÇÃO: Esta ação de apagar suas informações é <span className="font-bold text-red-600">irreversível</span>. Tem certeza de que deseja&nbsp;continuar?
+                  </p>
+                  <div className="flex gap-3 w-full">
+                    <button 
+                      onClick={() => setIsDeleteModalOpen(false)} 
+                      className="flex-1 py-3 rounded-xl text-gray-700 bg-gray-200 hover:bg-gray-300 font-medium transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      onClick={() => setDeleteStep(2)} 
+                      className="flex-1 py-3 rounded-xl text-white bg-red-600 hover:bg-red-700 font-medium transition-colors"
+                    >
+                      Avançar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col text-left">
+                  <h3 className="font-playfair text-2xl font-bold text-[#011640] mb-2">O que deseja apagar?</h3>
+                  <p className="text-sm text-gray-500 mb-6">Selecione os dados que você deseja excluir permanentemente da sua conta:</p>
+                  
+                  <div className="space-y-3 mb-6">
+                    <label className="flex items-center space-x-3 p-3 bg-white border border-gray-100 rounded-xl cursor-pointer hover:border-[#011640] transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={deleteOptions.transacoes} 
+                        onChange={(e) => setDeleteOptions({...deleteOptions, transacoes: e.target.checked})}
+                        className="w-5 h-5 rounded text-[#011640] focus:ring-[#011640]" 
+                      />
+                      <span className="font-medium text-[#011640]">Todas as Transações</span>
+                    </label>
+                    
+                    <label className="flex items-center space-x-3 p-3 bg-white border border-gray-100 rounded-xl cursor-pointer hover:border-[#011640] transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={deleteOptions.orcamentos} 
+                        onChange={(e) => setDeleteOptions({...deleteOptions, orcamentos: e.target.checked})}
+                        className="w-5 h-5 rounded text-[#011640] focus:ring-[#011640]" 
+                      />
+                      <span className="font-medium text-[#011640]">Todos os Orçamentos</span>
+                    </label>
+
+                    <label className="flex items-center space-x-3 p-3 bg-white border border-gray-100 rounded-xl cursor-pointer hover:border-[#011640] transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={deleteOptions.metas} 
+                        onChange={(e) => setDeleteOptions({...deleteOptions, metas: e.target.checked})}
+                        className="w-5 h-5 rounded text-[#011640] focus:ring-[#011640]" 
+                      />
+                      <span className="font-medium text-[#011640]">Todas as Metas</span>
+                    </label>
+                  </div>
+
+                  <div className="flex gap-3 w-full">
+                    <button 
+                      onClick={() => setDeleteStep(1)} 
+                      className="flex-1 py-3 rounded-xl text-gray-700 bg-gray-200 hover:bg-gray-300 font-medium transition-colors"
+                    >
+                      Voltar
+                    </button>
+                    <button 
+                      onClick={handleDeleteAllData}
+                      disabled={!deleteOptions.transacoes && !deleteOptions.orcamentos && !deleteOptions.metas}
+                      className="flex-1 py-3 rounded-xl text-white bg-red-600 hover:bg-red-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Confirmar Exclusão
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showOnboarding && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-[#FDFAF4] rounded-3xl w-full max-w-md p-8 shadow-2xl relative flex flex-col items-center text-center">
+              <h3 className="font-playfair text-2xl font-bold text-[#011640] mb-4 text-balance">
+                {ONBOARDING_STEPS[onboardingStep].title}
+              </h3>
+              <p className="text-gray-600 mb-8 leading-relaxed text-balance">
+                {ONBOARDING_STEPS[onboardingStep].description}
+              </p>
+              
+              <div className="flex items-center gap-2 mb-8">
+                {ONBOARDING_STEPS.map((_, i) => (
+                  <div 
+                    key={i}
+                    className={`h-2 rounded-full transition-all duration-300 ${i === onboardingStep ? 'w-8 bg-[#011640]' : 'w-2 bg-gray-200'}`}
+                  />
+                ))}
+              </div>
+
+              <div className="flex gap-4 w-full">
+                {onboardingStep < ONBOARDING_STEPS.length - 1 ? (
+                  <button
+                    onClick={() => setOnboardingStep(prev => prev + 1)}
+                    className="flex-1 bg-[#011640] text-white py-3 rounded-xl font-medium hover:bg-[#01256B] transition-colors"
+                  >
+                    Próximo
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      localStorage.setItem('hasSeenOnboarding_noazul', 'true');
+                      setShowOnboarding(false);
+                      // Se fechou onboarding, garante que o update não aparece por cima logo depois
+                      localStorage.setItem('hasSeenUpdate_v1', 'true');
+                    }}
+                    className="flex-1 bg-[#10B981] text-white py-3 rounded-xl font-medium hover:bg-green-600 transition-colors shadow-lg shadow-green-500/20"
+                  >
+                    Começar
+                  </button>
+                )}
+                
+                {onboardingStep < ONBOARDING_STEPS.length - 1 && (
+                  <button
+                    onClick={() => {
+                      localStorage.setItem('hasSeenOnboarding_noazul', 'true');
+                      setShowOnboarding(false);
+                      localStorage.setItem('hasSeenUpdate_v1', 'true');
+                    }}
+                    className="px-6 text-gray-400 font-medium hover:text-gray-600 transition-colors"
+                  >
+                    Pular
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showUpdateModal && !showOnboarding && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-[#FDFAF4] rounded-3xl w-full max-w-lg p-8 shadow-2xl relative flex flex-col">
+              
+              <div className="flex items-center justify-center mb-6">
+                <div className="bg-[#10B981]/10 text-[#10B981] px-4 py-1.5 rounded-full text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+                  Novidades da Versão
+                </div>
+              </div>
+
+              <h3 className="font-playfair text-2xl font-bold text-[#011640] text-center mb-2">
+                O No Azul ficou ainda melhor!
+              </h3>
+              <p className="text-gray-500 text-center text-sm mb-6 text-balance">
+                Implementamos várias melhorias que você pediu. Confira o que há de novo:
+              </p>
+
+              <div className="space-y-4 mb-8 bg-white p-4 rounded-2xl border border-gray-100 shadow-inner overflow-y-auto max-h-[40vh]">
+                
+                <div className="flex gap-4 items-start">
+                  <div className="mt-1 bg-[#011640]/10 p-2 rounded-xl text-[#011640] shrink-0">
+                    <PieChartIcon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#011640]">Nova aba "Análise"</h4>
+                    <p className="text-sm text-gray-600 leading-relaxed">Substituímos o Controle Mensal por um painel avançado! Agora você pode projetar seu saldo livre, ver o Top 5 maiores despesas e comparar gastos Essenciais vs Estilo de Vida.</p>
+                  </div>
+                </div>
+                
+                <div className="flex gap-4 items-start">
+                  <div className="mt-1 bg-[#F59E0B]/10 p-2 rounded-xl text-[#F59E0B] shrink-0">
+                    <Trophy className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#011640]">Metas Conquistadas</h4>
+                    <p className="text-sm text-gray-600 leading-relaxed">Agora, quando você atingir 100% de uma meta, ela aparecerá de forma destacada e comemorativa na nova seção "Metas Conquistadas".</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 items-start">
+                  <div className="mt-1 bg-red-100 p-2 rounded-xl text-red-500 shrink-0">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#011640]">Apagar Dados Específicos</h4>
+                    <p className="text-sm text-gray-600 leading-relaxed">Você ganhou mais controle: ao tentar resetar sua conta, agora pode escolher exatamente quais blocos limpar (ex: só transações, ou só metas).</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 items-start">
+                  <div className="mt-1 bg-green-100 p-2 rounded-xl text-green-500 shrink-0">
+                    <LayoutDashboard className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#011640]">Novo Visual e Cores</h4>
+                    <p className="text-sm text-gray-600 leading-relaxed">O sistema inteiro ganhou uma paleta atualizada (Azul Marinho `#011640`), gráficos mais precisos e melhor espaçamento em textos para facilitar a leitura diária.</p>
+                  </div>
+                </div>
+
+              </div>
+
+              <button
+                onClick={() => {
+                  localStorage.setItem('hasSeenUpdate_v1', 'true');
+                  setShowUpdateModal(false);
+                }}
+                className="w-full bg-[#011640] text-white py-3 rounded-xl font-medium hover:bg-[#01256B] transition-colors"
+              >
+                Entendi, vamos lá!
+              </button>
+
             </div>
           </div>
         )}

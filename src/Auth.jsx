@@ -73,7 +73,7 @@ export default function Auth({ isRecovery, onPasswordUpdated }) {
     <div className="flex h-screen w-full items-center justify-center bg-[#F5F0E8] font-dm">
       <div className="w-full max-w-md bg-[#FDFAF4] p-8 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex flex-col items-center mb-8">
-          <div className="p-3 bg-[#2C6E7F] rounded-2xl mb-4 shadow-lg shadow-[#2C6E7F]/20">
+          <div className="p-3 bg-[#011640] rounded-2xl mb-4 shadow-lg shadow-[#011640]/20">
             <Wallet className="text-white w-8 h-8" />
           </div>
           <h1 className="font-playfair text-3xl font-bold text-[#1C2B2D]">
@@ -112,7 +112,7 @@ export default function Auth({ isRecovery, onPasswordUpdated }) {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 w-full rounded-lg border-gray-300 border p-2.5 focus:ring-[#2C6E7F] focus:border-[#2C6E7F] outline-none transition-colors"
+                  className="pl-10 w-full rounded-lg border-gray-300 border p-2.5 focus:ring-[#011640] focus:border-[#011640] outline-none transition-colors"
                   placeholder="seu@email.com"
                 />
               </div>
@@ -129,7 +129,7 @@ export default function Auth({ isRecovery, onPasswordUpdated }) {
                   <button
                     type="button"
                     onClick={() => { setView('reset'); setError(null); setMessage(null); }}
-                    className="text-xs text-[#2C6E7F] hover:underline"
+                    className="text-xs text-[#011640] hover:underline"
                   >
                     Esqueceu a senha?
                   </button>
@@ -144,7 +144,7 @@ export default function Auth({ isRecovery, onPasswordUpdated }) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 w-full rounded-lg border-gray-300 border p-2.5 focus:ring-[#2C6E7F] focus:border-[#2C6E7F] outline-none transition-colors"
+                  className="pl-10 w-full rounded-lg border-gray-300 border p-2.5 focus:ring-[#011640] focus:border-[#011640] outline-none transition-colors"
                   placeholder="••••••••"
                 />
               </div>
@@ -154,7 +154,7 @@ export default function Auth({ isRecovery, onPasswordUpdated }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#2C6E7F] text-white p-3 rounded-xl hover:bg-[#1A4A57] transition-all font-medium mt-6 shadow-md disabled:opacity-70 flex justify-center items-center"
+            className="w-full bg-[#011640] text-white p-3 rounded-xl hover:bg-[#01256B] transition-all font-medium mt-6 shadow-md disabled:opacity-70 flex justify-center items-center"
           >
             {loading ? (
               <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -173,14 +173,14 @@ export default function Auth({ isRecovery, onPasswordUpdated }) {
           {view === 'reset' ? (
             <button
               onClick={() => { setView('login'); setError(null); setMessage(null); }}
-              className="text-sm text-[#2C6E7F] hover:underline font-medium block w-full"
+              className="text-sm text-[#011640] hover:underline font-medium block w-full"
             >
               Voltar para o login
             </button>
           ) : view === 'update' ? null : (
             <button
               onClick={() => { setView(view === 'login' ? 'signup' : 'login'); setError(null); setMessage(null); }}
-              className="text-sm text-[#2C6E7F] hover:underline font-medium"
+              className="text-sm text-[#011640] hover:underline font-medium"
             >
               {view === 'login' ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Faça login'}
             </button>
