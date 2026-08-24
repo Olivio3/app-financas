@@ -372,6 +372,7 @@ export default function FinanceApp({ session }) {
   const [novaMeta, setNovaMeta] = useState({ nome: '', valor_alvo: '' });
   const [novaCategoria, setNovaCategoria] = useState({ nome: '', cor: '#011640', tipo: 'Saída' });
   const [categoriaEditando, setCategoriaEditando] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [addValorMeta, setAddValorMeta] = useState({ metaId: null, valor: '' });
   const [selectedDay, setSelectedDay] = useState(null);
 
@@ -1909,31 +1910,38 @@ export default function FinanceApp({ session }) {
         }} 
       />
       {/* Sidebar for Desktop */}
-      <aside className="hidden md:flex w-64 bg-gradient-to-b from-[#1B344A] to-[#011640] text-white flex-col z-20">
-        <div className="p-6">
-          <h1 className="font-playfair text-2xl font-bold flex items-center text-[#FDFAF4]">
-            <Wallet className="mr-2 text-[#011640]" /> No Azul
-          </h1>
+      <aside className={`hidden md:flex flex-col z-20 bg-gradient-to-b from-[#1B344A] to-[#011640] text-white transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+        <div className="p-6 flex items-center justify-between">
+          {isSidebarOpen && (
+            <h1 className="font-playfair text-2xl font-bold flex items-center text-[#FDFAF4] truncate">
+              <Wallet className="mr-2 shrink-0 text-[#011640]" /> No Azul
+            </h1>
+          )}
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className={`text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10 ${!isSidebarOpen ? 'mx-auto' : ''}`}>
+            <ChevronLeft className={`w-6 h-6 transition-transform duration-300 ${!isSidebarOpen ? 'rotate-180' : ''}`} />
+          </button>
         </div>
-        <nav className="flex-1 px-4 space-y-2 mt-4">
+        <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto overflow-x-hidden">
           {navItems.map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-[#011640] text-white shadow-lg' : 'text-gray-400 hover:bg-[#01256B] hover:text-white'}`}
+              title={!isSidebarOpen ? item.label : ''}
+              className={`w-full flex items-center py-3 rounded-xl transition-all ${isSidebarOpen ? 'space-x-3 px-4' : 'justify-center px-0'} ${activeTab === item.id ? 'bg-[#011640] text-white shadow-lg' : 'text-gray-400 hover:bg-[#01256B] hover:text-white'}`}
             >
-              {item.icon}
-              <span className="font-medium">{item.label}</span>
+              <div className="shrink-0">{item.icon}</div>
+              {isSidebarOpen && <span className="font-medium whitespace-nowrap">{item.label}</span>}
             </button>
           ))}
         </nav>
         <div className="p-4 space-y-2">
           <button
             onClick={() => supabase.auth.signOut()}
-            className="w-full flex items-center justify-center space-x-2 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-medium border border-red-400/20"
+            title={!isSidebarOpen ? 'Sair' : ''}
+            className={`w-full flex items-center justify-center p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-medium border border-red-400/20 ${isSidebarOpen ? 'space-x-2' : ''}`}
           >
-            <LogOut className="w-5 h-5" />
-            <span>Sair</span>
+            <LogOut className="w-5 h-5 shrink-0" />
+            {isSidebarOpen && <span>Sair</span>}
           </button>
           <button
             onClick={() => {
@@ -1941,10 +1949,11 @@ export default function FinanceApp({ session }) {
               setDeleteOptions({ transacoes: true, orcamentos: true, metas: true });
               setIsDeleteModalOpen(true);
             }}
-            className="w-full flex items-center justify-center space-x-2 p-3 text-red-600 hover:bg-red-600/10 rounded-xl transition-all font-medium border border-red-600/20"
+            title={!isSidebarOpen ? 'Apagar Tudo' : ''}
+            className={`w-full flex items-center justify-center p-3 text-red-600 hover:bg-red-600/10 rounded-xl transition-all font-medium border border-red-600/20 ${isSidebarOpen ? 'space-x-2' : ''}`}
           >
-            <Trash2 className="w-5 h-5" />
-            <span>Apagar Tudo</span>
+            <Trash2 className="w-5 h-5 shrink-0" />
+            {isSidebarOpen && <span>Apagar Tudo</span>}
           </button>
         </div>
       </aside>
