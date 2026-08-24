@@ -28,7 +28,8 @@ import {
   Sparkles,
   Receipt,
   X,
-  CheckCircle
+  CheckCircle,
+  Tags
 } from 'lucide-react';
 
 const ONBOARDING_STEPS = [
@@ -67,23 +68,19 @@ import {
 } from 'recharts';
 
 // --- Utilitários e Constantes ---
-const CATEGORY_COLORS = {
-  'Alimentação': '#E08E79', // Salmão
-  'Moradia': '#01256B',    // Azul Escuro
-  'Transporte': '#D9A05B',  // Ouro
-  'Saúde': '#6B8E23',      // Verde Oliva
-  'Lazer': '#4E8D9C',      // Azul Médio
-  'Educação': '#A0522D',   // Marrom
-  'Salário': '#011640',    // Verde Água/Azul Mar
-  'Freelance': '#7FB5C2',  // Azul Claro
-  'Investimentos': '#8B5CF6', // Roxo
-  'Trabalho': '#F59E0B',      // Âmbar
-  'Outros': '#B4D2D9'      // Azul Pálido
+const DEFAULT_CATEGORY_COLORS = {
+  'Alimentação': '#E08E79',
+  'Moradia': '#01256B',
+  'Transporte': '#D9A05B',
+  'Saúde': '#6B8E23',
+  'Lazer': '#4E8D9C',
+  'Educação': '#A0522D',
+  'Salário': '#011640',
+  'Freelance': '#7FB5C2',
+  'Investimentos': '#8B5CF6',
+  'Trabalho': '#F59E0B',
+  'Outros': '#B4D2D9'
 };
-
-const getCategoryColor = (category) => CATEGORY_COLORS[category] || '#94a3b8';
-
-const COLORS = Object.values(CATEGORY_COLORS);
 
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -124,7 +121,7 @@ const parseCurrencyToFloat = (value) => {
   return parseFloat(cleaned) || 0;
 };
 
-const CATEGORIAS = ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Salário', 'Freelance', 'Investimentos', 'Trabalho', 'Outros'];
+// Removido CATEGORIAS global
 const TIPOS_INVESTIMENTO = ['Renda Fixa', 'Ações', 'FII', 'Cripto', 'Internacional'];
 
 const getValidDayForMonth = (year, month, targetDay) => {
@@ -163,7 +160,7 @@ const generateMockData = () => {
   for (let i = 0; i < 20; i++) {
     const data = new Date(hoje.getFullYear(), hoje.getMonth() - Math.floor(Math.random() * 3), Math.floor(Math.random() * 28) + 1);
     const isEntrada = Math.random() > 0.7;
-    const categoria = isEntrada ? (Math.random() > 0.5 ? 'Salário' : 'Freelance') : CATEGORIAS[Math.floor(Math.random() * 6)];
+    const categoria = isEntrada ? (Math.random() > 0.5 ? 'Salário' : 'Freelance') : ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação'][Math.floor(Math.random() * 6)];
 
     transactions.push({
       id: i + 1,
@@ -187,7 +184,7 @@ const generateMockData = () => {
   };
 };
 
-const initialState = { transactions: [], budgets: [], goals: [] };
+const initialState = { transactions: [], budgets: [], goals: [], categories: [] };
 
 // --- Reducer ---
 function financeReducer(state, action) {
@@ -236,6 +233,12 @@ function financeReducer(state, action) {
       return { ...state, goals: state.goals.map(g => g.id === action.payload.id ? action.payload : g) };
     case 'DELETE_GOAL':
       return { ...state, goals: state.goals.filter(g => g.id !== action.payload) };
+    case 'ADD_CATEGORY':
+      return { ...state, categories: [...state.categories, action.payload] };
+    case 'UPDATE_CATEGORY':
+      return { ...state, categories: state.categories.map(c => c.id === action.payload.id ? action.payload : c) };
+    case 'DELETE_CATEGORY':
+      return { ...state, categories: state.categories.filter(c => c.id !== action.payload) };
     default:
       return state;
   }
@@ -244,7 +247,18 @@ function financeReducer(state, action) {
 // --- Componente Principal ---
 export default function FinanceApp({ session }) {
   const [state, dispatch] = useReducer(financeReducer, initialState);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('noazul_active_tab') || 'dashboard';
+  });
+
+  const getCategoryColor = React.useCallback((categoryName) => {
+    const cat = state.categories.find(c => c.nome === categoryName);
+    return cat ? cat.cor : '#94a3b8';
+  }, [state.categories]);
+
+  React.useEffect(() => {
+    localStorage.setItem('noazul_active_tab', activeTab);
+  }, [activeTab]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteStep, setDeleteStep] = useState(1);
@@ -255,7 +269,7 @@ export default function FinanceApp({ session }) {
   React.useEffect(() => {
     if (session?.user) {
       const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding_noazul');
-      const hasSeenUpdate = localStorage.getItem('hasSeenUpdate_v2');
+      const hasSeenUpdate = localStorage.getItem('hasSeenUpdate_v3');
       if (!hasSeenOnboarding) {
         setShowOnboarding(true);
       } else if (!hasSeenUpdate) {
@@ -274,18 +288,56 @@ export default function FinanceApp({ session }) {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [transRes, budRes, goalsRes] = await Promise.all([
+      const [transRes, budRes, goalsRes, catRes] = await Promise.all([
         supabase.from('transactions').select('*').eq('user_id', session.user.id).order('data', { ascending: false }),
         supabase.from('budgets').select('*').eq('user_id', session.user.id),
-        supabase.from('goals').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true })
+        supabase.from('goals').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true }),
+        supabase.from('categories').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true })
       ]);
+
+      let loadedCategories = catRes.data || [];
+
+      // Limpeza de duplicatas (caso o StrictMode ou re-renders tenham disparado multiplos inserts)
+      const uniqueNames = new Set();
+      const duplicatesToDelete = [];
+      const deduplicated = [];
+      
+      for (const cat of loadedCategories) {
+        if (uniqueNames.has(cat.nome)) {
+          duplicatesToDelete.push(cat.id);
+        } else {
+          uniqueNames.add(cat.nome);
+          deduplicated.push(cat);
+        }
+      }
+
+      if (duplicatesToDelete.length > 0) {
+        await supabase.from('categories').delete().in('id', duplicatesToDelete);
+        loadedCategories = deduplicated;
+      }
+
+      // Migração / Criação de Categorias Iniciais
+      if (loadedCategories.length === 0) {
+        const defaultCats = Object.entries(DEFAULT_CATEGORY_COLORS).map(([nome, cor]) => ({
+          user_id: session.user.id,
+          nome,
+          cor,
+          tipo: ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Investimentos', 'Outros'].includes(nome) ? 'Saída' : 'Entrada'
+        }));
+        
+        const { data: insertedCats } = await supabase.from('categories').insert(defaultCats).select();
+        if (insertedCats) {
+          loadedCategories = insertedCats;
+        }
+      }
 
       dispatch({
         type: 'SET_DATA',
         payload: {
           transactions: transRes.data || [],
           budgets: budRes.data || [],
-          goals: goalsRes.data || []
+          goals: goalsRes.data || [],
+          categories: loadedCategories
         }
       });
     } catch (error) {
@@ -316,8 +368,10 @@ export default function FinanceApp({ session }) {
     data: new Date().toISOString().split('T')[0],
     frequencia: 'pontual', pagamento: 'a vista', parcelas: 1, metodo_pagamento: 'Pix'
   });
-  const [novoOrcamento, setNovoOrcamento] = useState({ categoria: CATEGORIAS[0], valor: '' });
+  const [novoOrcamento, setNovoOrcamento] = useState({ categoria: '', valor: '' });
   const [novaMeta, setNovaMeta] = useState({ nome: '', valor_alvo: '' });
+  const [novaCategoria, setNovaCategoria] = useState({ nome: '', cor: '#011640', tipo: 'Saída' });
+  const [categoriaEditando, setCategoriaEditando] = useState(null);
   const [addValorMeta, setAddValorMeta] = useState({ metaId: null, valor: '' });
   const [selectedDay, setSelectedDay] = useState(null);
 
@@ -817,7 +871,7 @@ export default function FinanceApp({ session }) {
             <div className="grid grid-cols-2 md:grid-cols-7 gap-3 md:gap-4 items-end">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({ ...novaTransacao, tipo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
+                <select value={novaTransacao.tipo} onChange={e => setNovaTransacao({ ...novaTransacao, tipo: e.target.value, categoria: state.categories.filter(c => c.tipo === e.target.value)[0]?.nome || '' })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
                   <option value="Saída">Saída</option>
                   <option value="Entrada">Entrada</option>
                 </select>
@@ -825,7 +879,8 @@ export default function FinanceApp({ session }) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
                 <select value={novaTransacao.categoria} onChange={e => setNovaTransacao({ ...novaTransacao, categoria: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
-                  {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="">Selecione...</option>
+                  {state.categories.filter(c => c.tipo === novaTransacao.tipo).map(c => <option key={c.nome} value={c.nome}>{c.nome}</option>)}
                 </select>
               </div>
               <div>
@@ -1141,7 +1196,7 @@ export default function FinanceApp({ session }) {
           type: 'ADD_BUDGET',
           payload: result.data[0]
         });
-        setNovoOrcamento({ categoria: CATEGORIAS[0], valor: '' });
+        setNovoOrcamento({ categoria: state.categories.filter(c => c.tipo === 'Saída')[0]?.nome || '', valor: '' });
       }
     };
 
@@ -1160,7 +1215,7 @@ export default function FinanceApp({ session }) {
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
               <select value={novoOrcamento.categoria} onChange={e => setNovoOrcamento({ ...novoOrcamento, categoria: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
-                {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                {state.categories.filter(c => c.tipo === 'Saída').map(c => <option key={c.nome} value={c.nome}>{c.nome}</option>)}
               </select>
             </div>
             <div className="flex-1">
@@ -1596,6 +1651,134 @@ export default function FinanceApp({ session }) {
       </div>
     );
   };
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    if (!novaCategoria.nome) {
+      toast.error('Preencha o nome da categoria.');
+      return;
+    }
+    const { data, error } = await supabase.from('categories').insert([{
+      user_id: session.user.id,
+      ...novaCategoria
+    }]).select();
+    
+    if (error) {
+      console.error(error);
+      toast.error('Erro ao adicionar categoria.');
+    } else if (data) {
+      dispatch({ type: 'ADD_CATEGORY', payload: data[0] });
+      setNovaCategoria({ nome: '', cor: '#011640', tipo: 'Saída' });
+      toast.success('Categoria criada!');
+    }
+  };
+
+  const handleDeleteCategory = async (id) => {
+    if (window.confirm('Tem certeza que deseja excluir esta categoria? As transações antigas continuarão com este nome, mas perderão a cor.')) {
+      const { error } = await supabase.from('categories').delete().eq('id', id).eq('user_id', session.user.id);
+      if (!error) {
+        dispatch({ type: 'DELETE_CATEGORY', payload: id });
+        toast.success('Categoria excluída!');
+      } else {
+        toast.error('Erro ao excluir.');
+      }
+    }
+  };
+
+  const handleEditCategory = async (e) => {
+    e.preventDefault();
+    if (!categoriaEditando.nome) return;
+    const { data, error } = await supabase.from('categories').update({
+      nome: categoriaEditando.nome,
+      cor: categoriaEditando.cor,
+      tipo: categoriaEditando.tipo
+    }).eq('id', categoriaEditando.id).eq('user_id', session.user.id).select();
+    
+    if (error) {
+      toast.error('Erro ao atualizar.');
+    } else if (data) {
+      dispatch({ type: 'UPDATE_CATEGORY', payload: data[0] });
+      setCategoriaEditando(null);
+      toast.success('Categoria atualizada!');
+    }
+  };
+
+  const renderCategorias = () => {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-[#011640]">Categorias Personalizadas</h2>
+          <p className="text-gray-500 text-sm">Crie, edite e organize suas próprias categorias de transação.</p>
+        </div>
+
+        <form onSubmit={handleAddCategory} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Categoria</label>
+            <input type="text" required placeholder="Ex: Assinaturas" value={novaCategoria.nome} onChange={e => setNovaCategoria({ ...novaCategoria, nome: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" />
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+            <select value={novaCategoria.tipo} onChange={e => setNovaCategoria({ ...novaCategoria, tipo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]">
+              <option value="Saída">Saída (Despesa)</option>
+              <option value="Entrada">Entrada (Receita)</option>
+            </select>
+          </div>
+          <div className="w-24">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Cor</label>
+            <input type="color" value={novaCategoria.cor} onChange={e => setNovaCategoria({ ...novaCategoria, cor: e.target.value })} className="w-full h-10 rounded-lg cursor-pointer border-0 p-0" />
+          </div>
+          <button type="submit" className="bg-[#011640] text-white px-6 py-2 rounded-lg hover:bg-[#01256B] transition-colors flex items-center h-10">
+            <Plus className="w-5 h-5 mr-2" />
+            Adicionar
+          </button>
+        </form>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {state.categories.map(c => (
+            <div key={c.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-all min-h-[72px]">
+              {categoriaEditando?.id === c.id ? (
+                <form onSubmit={handleEditCategory} className="w-full flex items-center space-x-2">
+                  <input type="color" value={categoriaEditando.cor} onChange={e => setCategoriaEditando({...categoriaEditando, cor: e.target.value})} className="w-8 h-8 rounded cursor-pointer border-0 p-0 shrink-0" />
+                  <input type="text" value={categoriaEditando.nome} onChange={e => setCategoriaEditando({...categoriaEditando, nome: e.target.value})} className="flex-1 rounded-lg border-gray-300 border px-2 py-1 text-sm w-full min-w-0" />
+                  <select value={categoriaEditando.tipo} onChange={e => setCategoriaEditando({...categoriaEditando, tipo: e.target.value})} className="rounded-lg border-gray-300 border px-1 py-1 text-sm shrink-0">
+                    <option value="Saída">Saída</option>
+                    <option value="Entrada">Entrada</option>
+                  </select>
+                  <button type="submit" className="text-green-600 hover:bg-green-50 p-1 rounded transition-colors shrink-0"><CheckCircle className="w-4 h-4"/></button>
+                  <button type="button" onClick={() => setCategoriaEditando(null)} className="text-gray-400 hover:bg-gray-50 p-1 rounded transition-colors shrink-0"><X className="w-4 h-4"/></button>
+                </form>
+              ) : (
+                <>
+                  <div className="flex items-center space-x-3 truncate">
+                    <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: c.cor }}></div>
+                    <div className="truncate">
+                      <h3 className="font-semibold text-gray-800 truncate">{c.nome}</h3>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${c.tipo === 'Entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {c.tipo}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0">
+                    <button onClick={() => setCategoriaEditando(c)} className="text-gray-400 hover:text-blue-500 p-2 rounded-lg hover:bg-blue-50 transition-colors">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleDeleteCategory(c.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+          {state.categories.length === 0 && (
+            <div className="col-span-full text-center py-8 text-gray-500 bg-white rounded-xl border border-gray-100">
+              Nenhuma categoria encontrada. As categorias originais devem carregar em breve.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderManual = () => {
     return (
       <div className="bg-[#FDFAF4] p-8 rounded-2xl shadow-sm border border-gray-100 max-w-4xl mx-auto space-y-6 text-[#011640] animate-in fade-in duration-200">
@@ -1611,6 +1794,15 @@ export default function FinanceApp({ session }) {
             </h4>
             <p className="text-sm text-gray-600 leading-relaxed">
               Sua visão geral sobre a saúde financeira do mês selecionado. Ele exibe o saldo do mês, saldo acumulado total histórico, entradas, saídas, gráficos do fluxo de caixa dos últimos 6 meses, gráfico de pizza com as despesas por categoria, previsão de custo fixo anual e dívidas futuras em parcelamento.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="font-playfair font-bold text-xl text-[#011640] flex items-center gap-2">
+              Categorias Personalizadas
+            </h4>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Você tem total controle sobre como classificar suas finanças. Na aba "Categorias", é possível criar, editar (nome, tipo e cor) ou excluir categorias. As cores escolhidas refletem automaticamente em todos os gráficos e orçamentos. Além disso, se você apagar uma categoria, as transações antigas manterão o nome registrado para que você não perca seu histórico.
             </p>
           </section>
 
@@ -1691,6 +1883,7 @@ export default function FinanceApp({ session }) {
     { id: 'analise', label: 'Análise', icon: <PieChartIcon className="w-5 h-5" /> },
     { id: 'orcamento', label: 'Orçamentos', icon: <Target className="w-5 h-5" /> },
     { id: 'metas', label: 'Metas', icon: <Trophy className="w-5 h-5" /> },
+    { id: 'categorias', label: 'Categorias', icon: <Tags className="w-5 h-5" /> },
     { id: 'calendario', label: 'Calendário', icon: <CalendarDays className="w-5 h-5" /> },
     { id: 'manual', label: 'Manual', icon: <BookOpen className="w-5 h-5" /> }
   ];
@@ -1699,7 +1892,22 @@ export default function FinanceApp({ session }) {
 
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden font-dm bg-[#F5F0E8]">
-      <Toaster position="top-right" />
+      <Toaster 
+        position="top-center" 
+        toastOptions={{
+          style: {
+            whiteSpace: 'nowrap',
+            minWidth: 'max-content'
+          }
+        }}
+        containerStyle={{
+          top: '50%',
+          left: '50%',
+          bottom: 'auto',
+          right: 'auto',
+          transform: 'translate(-50%, -50%)'
+        }} 
+      />
       {/* Sidebar for Desktop */}
       <aside className="hidden md:flex w-64 bg-gradient-to-b from-[#1B344A] to-[#011640] text-white flex-col z-20">
         <div className="p-6">
@@ -1797,6 +2005,7 @@ export default function FinanceApp({ session }) {
             {activeTab === 'analise' && renderAnalise()}
             {activeTab === 'orcamento' && renderOrcamento()}
             {activeTab === 'metas' && renderMetas()}
+            {activeTab === 'categorias' && renderCategorias()}
             {activeTab === 'calendario' && renderCalendario()}
             {activeTab === 'manual' && renderManual()}
           </div>
@@ -1896,7 +2105,8 @@ export default function FinanceApp({ session }) {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
                     <select value={transactionToEdit.categoria} onChange={e => setTransactionToEdit({ ...transactionToEdit, categoria: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#011640] outline-none">
-                      {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                      <option value="">Selecione...</option>
+                      {state.categories.filter(c => c.tipo === transactionToEdit.tipo).map(c => <option key={c.nome} value={c.nome}>{c.nome}</option>)}
                     </select>
                   </div>
                 </div>
@@ -2058,7 +2268,7 @@ export default function FinanceApp({ session }) {
                       localStorage.setItem('hasSeenOnboarding_noazul', 'true');
                       setShowOnboarding(false);
                       // Se fechou onboarding, garante que o update não aparece por cima logo depois
-                      localStorage.setItem('hasSeenUpdate_v2', 'true');
+                      localStorage.setItem('hasSeenUpdate_v3', 'true');
                     }}
                     className="flex-1 bg-[#10B981] text-white py-3 rounded-xl font-medium hover:bg-green-600 transition-colors shadow-lg shadow-green-500/20"
                   >
@@ -2071,7 +2281,7 @@ export default function FinanceApp({ session }) {
                     onClick={() => {
                       localStorage.setItem('hasSeenOnboarding_noazul', 'true');
                       setShowOnboarding(false);
-                      localStorage.setItem('hasSeenUpdate_v2', 'true');
+                      localStorage.setItem('hasSeenUpdate_v3', 'true');
                     }}
                     className="px-6 text-gray-400 font-medium hover:text-gray-600 transition-colors"
                   >
@@ -2113,6 +2323,16 @@ export default function FinanceApp({ session }) {
                 </div>
                 
                 <div className="flex gap-4 items-start">
+                  <div className="mt-1 bg-[#8B5CF6]/10 p-2 rounded-xl text-[#8B5CF6] shrink-0">
+                    <Tags className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#011640]">Categorias Dinâmicas</h4>
+                    <p className="text-sm text-gray-600 leading-relaxed">Diga adeus à lista engessada! Adicionamos uma aba inteira de "Categorias" onde você cria, edita e apaga as suas opções, deixando o app com a sua cara!</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 items-start">
                   <div className="mt-1 bg-[#F59E0B]/10 p-2 rounded-xl text-[#F59E0B] shrink-0">
                     <Trophy className="w-5 h-5" />
                   </div>
@@ -2146,7 +2366,7 @@ export default function FinanceApp({ session }) {
 
               <button
                 onClick={() => {
-                  localStorage.setItem('hasSeenUpdate_v2', 'true');
+                  localStorage.setItem('hasSeenUpdate_v3', 'true');
                   setShowUpdateModal(false);
                 }}
                 className="w-full bg-[#011640] text-white py-3 rounded-xl font-medium hover:bg-[#01256B] transition-colors"
