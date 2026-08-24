@@ -1465,7 +1465,7 @@ export default function FinanceApp({ session }) {
       if (!novaMeta.nome || !novaMeta.valor_alvo) return;
       const newGoal = {
         nome: novaMeta.nome,
-        valor_alvo: parseFloat(novaMeta.valor_alvo),
+        valor_alvo: parseCurrencyToFloat(novaMeta.valor_alvo),
         valor_atual: 0,
         user_id: session.user.id
       };
@@ -1481,7 +1481,7 @@ export default function FinanceApp({ session }) {
 
     const handleAddValue = async (e, goal) => {
       e.preventDefault();
-      const valorAdicional = parseFloat(addValorMeta.valor);
+      const valorAdicional = parseCurrencyToFloat(addValorMeta.valor);
       if (!valorAdicional || addValorMeta.metaId !== goal.id) return;
       const novoValorAtual = goal.valor_atual + valorAdicional;
       
@@ -1583,7 +1583,7 @@ export default function FinanceApp({ session }) {
             </div>
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total Necessário (R$)</label>
-              <input type="number" step="0.01" required value={novaMeta.valor_alvo} onChange={e => setNovaMeta({ ...novaMeta, valor_alvo: e.target.value })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" placeholder="0.00" />
+              <input type="text" required value={novaMeta.valor_alvo} onChange={e => setNovaMeta({ ...novaMeta, valor_alvo: formatInputCurrency(e.target.value) })} className="w-full rounded-lg border-gray-300 border p-2 focus:ring-[#011640]" placeholder="0,00" />
             </div>
             <button type="submit" className="bg-[#011640] text-white p-2 px-6 rounded-lg hover:bg-[#01256B] transition-colors h-[42px] flex items-center">
               <PlusCircle className="w-5 h-5 mr-1" /> Criar Meta
@@ -1618,9 +1618,9 @@ export default function FinanceApp({ session }) {
                       {!goal.concluida ? (
                         <form onSubmit={(e) => handleAddValue(e, goal)} className="flex items-center space-x-2">
                           <input
-                            type="number" step="0.01" required placeholder="0.00"
+                            type="text" required placeholder="0,00"
                             value={addValorMeta.metaId === goal.id ? addValorMeta.valor : ''}
-                            onChange={(e) => setAddValorMeta({ metaId: goal.id, valor: e.target.value })}
+                            onChange={(e) => setAddValorMeta({ metaId: goal.id, valor: formatInputCurrency(e.target.value) })}
                             className="w-24 rounded-lg border-gray-300 border p-1 text-sm focus:ring-[#011640]"
                           />
                           <button type="submit" className="text-xs bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded-lg transition-colors">
