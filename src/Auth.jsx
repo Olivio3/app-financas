@@ -63,7 +63,10 @@ export default function Auth({ isRecovery, onPasswordUpdated }) {
         }
       }
     } catch (error) {
-      setError(error.message || 'Ocorreu um erro durante a operação.');
+      const isNetworkError = /load failed|failed to fetch|networkerror|network request failed/i.test(error.message || '');
+      setError(isNetworkError
+        ? 'Não foi possível conectar ao serviço de acesso. Verifique sua conexão e tente novamente.'
+        : error.message || 'Ocorreu um erro durante a operação.');
     } finally {
       setLoading(false);
     }
